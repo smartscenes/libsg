@@ -1,0 +1,42 @@
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "wheel",
+    "scikit-build>=0.14.0",
+    "nanobind>=0.0.3",
+    "cmake>=3.18",
+    "ninja; platform_system!='Windows'"
+]
+
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "libsg"
+version = "0.0.1rc7"
+authors = [
+  { name="Manolis Savva", email="manolis.savva@gmail.com" },
+]
+description = "libSG: Scene Generation Library"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "easydict",
+    "hydra-core",
+    "flask",
+    "numpy",
+    "pybullet",
+    "pysolr",
+    "scipy",
+    "torch",
+    "torchvision",
+    "pytorch-fast-transformers",  # last, undeclared dep on torch
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/smartscenes/libsg"
+"Bug Tracker" = "https://github.com/smartscenes/libsg/issues"

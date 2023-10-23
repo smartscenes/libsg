@@ -1,0 +1,17 @@
+name: sb
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - easydict
+  - hydra-core
+  - flask
+  - numpy
+  - pip
+  - pybullet
+  - pysolr
+  - scipy
+  - pytorch
+  - torchvision
+  - pip:
+    - pytorch-fast-transformers
