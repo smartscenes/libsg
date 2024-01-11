@@ -5,7 +5,7 @@ channels:
 dependencies:
   - easydict
   - hydra-core
-  - flask
+  - flask==2.3.3
   - numpy
   - pip
   - pybullet
@@ -13,5 +13,12 @@ dependencies:
   - scipy
   - pytorch
   - torchvision
+  - flask-restx
+  - Werkzeug==2.3.7
+  - einops
   - pip:
     - pytorch-fast-transformers
+    - clip==0.2.0
+    - flask-restx
+    - transformers
+    - shapely==2.0.2

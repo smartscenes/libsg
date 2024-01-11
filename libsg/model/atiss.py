@@ -19,9 +19,7 @@ def cross_entropy_loss(pred, target):
     """Cross entropy loss."""
     B, L, C = target.shape
     loss = torch.nn.functional.cross_entropy(
-        pred.reshape(-1, C),
-        target.reshape(-1, C).argmax(-1),
-        reduction="none"
+        pred.reshape(-1, C), target.reshape(-1, C).argmax(-1), reduction="none"
     ).reshape(B, L)
 
     return loss
@@ -62,16 +60,14 @@ def dmll(pred, target, log_scale_min=-7.0, num_classes=256):
 
     # unpack parameters. (B, T, num_mixtures) x 3
     logit_probs = pred[:, :, :nr_mix]
-    means = pred[:, :, nr_mix:2 * nr_mix]
-    log_scales = torch.clamp(
-        pred[:, :, 2 * nr_mix:3 * nr_mix], min=log_scale_min
-    )
+    means = pred[:, :, nr_mix : 2 * nr_mix]
+    log_scales = torch.clamp(pred[:, :, 2 * nr_mix : 3 * nr_mix], min=log_scale_min)
 
     centered_y = target - means
     inv_stdv = torch.exp(-log_scales)
-    plus_in = inv_stdv * (centered_y + 1. / (num_classes - 1))
+    plus_in = inv_stdv * (centered_y + 1.0 / (num_classes - 1))
     cdf_plus = torch.sigmoid(plus_in)
-    min_in = inv_stdv * (centered_y - 1. / (num_classes - 1))
+    min_in = inv_stdv * (centered_y - 1.0 / (num_classes - 1))
     cdf_min = torch.sigmoid(min_in)
 
     # log probability for edge case of 0 (before scaling)
@@ -88,7 +84,7 @@ def dmll(pred, target, log_scale_min=-7.0, num_classes=256):
     mid_in = inv_stdv * centered_y
     # log probability in the center of the bin, to be used in extreme cases
     # (not actually used in our code)
-    log_pdf_mid = mid_in - log_scales - 2. * F.softplus(mid_in)
+    log_pdf_mid = mid_in - log_scales - 2.0 * F.softplus(mid_in)
 
     # tf equivalent
     """
@@ -102,14 +98,13 @@ def dmll(pred, target, log_scale_min=-7.0, num_classes=256):
     # for num_classes=65536 case? 1e-7? not sure..
     inner_inner_cond = (cdf_delta > 1e-5).float()
 
-    inner_inner_out = inner_inner_cond * \
-        torch.log(torch.clamp(cdf_delta, min=1e-12)) + \
-        (1. - inner_inner_cond) * (log_pdf_mid - np.log((num_classes - 1) / 2))
+    inner_inner_out = inner_inner_cond * torch.log(torch.clamp(cdf_delta, min=1e-12)) + (1.0 - inner_inner_cond) * (
+        log_pdf_mid - np.log((num_classes - 1) / 2)
+    )
     inner_cond = (target > 0.999).float()
-    inner_out = inner_cond * log_one_minus_cdf_min + \
-        (1. - inner_cond) * inner_inner_out
+    inner_out = inner_cond * log_one_minus_cdf_min + (1.0 - inner_cond) * inner_inner_out
     cond = (target < -0.999).float()
-    log_probs = cond * log_cdf_plus + (1. - cond) * inner_out
+    log_probs = cond * log_cdf_plus + (1.0 - cond) * inner_out
 
     log_probs = log_probs + F.log_softmax(logit_probs, -1)
     return -log_sum_exp(log_probs)
@@ -167,17 +162,21 @@ class BBoxOutput(object):
 class AutoregressiveBBoxOutput(BBoxOutput):
     def __init__(self, sizes, translations, angles, class_labels):
         self.sizes_x, self.sizes_y, self.sizes_z = sizes
-        self.translations_x, self.translations_y, self.translations_z = \
-            translations
+        self.translations_x, self.translations_y, self.translations_z = translations
         self.class_labels = class_labels
         self.angles = angles
 
     @property
     def members(self):
         return (
-            self.sizes_x, self.sizes_y, self.sizes_z,
-            self.translations_x, self.translations_y, self.translations_z,
-            self.angles, self.class_labels
+            self.sizes_x,
+            self.sizes_y,
+            self.sizes_z,
+            self.translations_x,
+            self.translations_y,
+            self.translations_z,
+            self.angles,
+            self.class_labels,
         )
 
     @property
@@ -210,7 +209,7 @@ class AutoregressiveBBoxOutput(BBoxOutput):
         label_loss = cross_entropy_loss(self.class_labels, target["labels"])
 
         # For the translations, sizes and angles compute the discretized
-        # logistic mixture likelihood as described in 
+        # logistic mixture likelihood as described in
         # PIXELCNN++: Improving the PixelCNN with Discretized Logistic Mixture Likelihood and
         # Other Modifications, by Salimans et al.
         translation_loss = dmll(self.translations_x, target["translations_x"])
@@ -225,8 +224,7 @@ class AutoregressiveBBoxOutput(BBoxOutput):
 
     def reconstruction_loss(self, X_target, lengths):
         # Compute the losses
-        label_loss, translation_loss, size_loss, angle_loss = \
-            self.get_losses(X_target)
+        label_loss, translation_loss, size_loss, angle_loss = self.get_losses(X_target)
 
         label_loss = label_loss.mean()
         translation_loss = translation_loss.mean()
@@ -244,10 +242,10 @@ class Hidden2Output(nn.Module):
         self.hidden_size = hidden_size
 
         mlp_layers = [
-            nn.Linear(hidden_size, 2*hidden_size),
+            nn.Linear(hidden_size, 2 * hidden_size),
             nn.ReLU(),
-            nn.Linear(2*hidden_size, hidden_size),
-            nn.ReLU()
+            nn.Linear(2 * hidden_size, hidden_size),
+            nn.ReLU(),
         ]
         self.hidden2output = nn.Sequential(*mlp_layers)
 
@@ -256,16 +254,8 @@ class Hidden2Output(nn.Module):
             x = self.hidden2output(x)
 
         class_labels = self.class_layer(x)
-        translations = (
-            self.centroid_layer_x(x),
-            self.centroid_layer_y(x),
-            self.centroid_layer_z(x)
-        )
-        sizes = (
-            self.size_layer_x(x),
-            self.size_layer_y(x),
-            self.size_layer_z(x)
-        )
+        translations = (self.centroid_layer_x(x), self.centroid_layer_y(x), self.centroid_layer_z(x))
+        sizes = (self.size_layer_x(x), self.size_layer_y(x), self.size_layer_z(x))
         angles = self.angle_layer(x)
         return class_labels, translations, sizes, angles
 
@@ -286,32 +276,25 @@ def sample_from_dmll(pred, num_classes=256):
     nr_mix = pred.size(1) // 3
 
     probs = torch.softmax(pred[:, :nr_mix], dim=-1)
-    means = pred[:, nr_mix:2 * nr_mix]
-    scales = torch.nn.functional.elu(pred[:, 2*nr_mix:3*nr_mix]) + 1.0001
+    means = pred[:, nr_mix : 2 * nr_mix]
+    scales = torch.nn.functional.elu(pred[:, 2 * nr_mix : 3 * nr_mix]) + 1.0001
 
     indices = torch.multinomial(probs, 1).squeeze()
     batch_indices = torch.arange(N, device=probs.device)
     mu = means[batch_indices, indices]
     s = scales[batch_indices, indices]
     u = torch.rand(N, device=probs.device)
-    preds = mu + s*(torch.log(u) - torch.log(1-u))
+    preds = mu + s * (torch.log(u) - torch.log(1 - u))
 
     return torch.clamp(preds, min=-1, max=1)[:, None]
 
 
 class AutoregressiveDMLL(Hidden2Output):
-    def __init__(
-        self,
-        hidden_size,
-        n_classes,
-        n_mixtures,
-        bbox_output,
-        with_extra_fc=False
-    ):
+    def __init__(self, hidden_size, n_classes, n_mixtures, bbox_output, with_extra_fc=False):
         super().__init__(hidden_size, n_classes, with_extra_fc)
 
         if not isinstance(n_mixtures, list):
-            n_mixtures = [n_mixtures]*7
+            n_mixtures = [n_mixtures] * 7
 
         self.class_layer = nn.Linear(hidden_size, n_classes)
 
@@ -324,40 +307,26 @@ class AutoregressiveDMLL(Hidden2Output):
         self.pe_angle_z = FixedPositionalEncoding(proj_dims=64)
 
         c_hidden_size = hidden_size + 64
-        self.centroid_layer_x = AutoregressiveDMLL._mlp(
-            c_hidden_size, n_mixtures[0]*3
-        )
-        self.centroid_layer_y = AutoregressiveDMLL._mlp(
-            c_hidden_size, n_mixtures[1]*3
-        )
-        self.centroid_layer_z = AutoregressiveDMLL._mlp(
-            c_hidden_size, n_mixtures[2]*3
-        )
-        c_hidden_size = c_hidden_size + 64*3
-        self.angle_layer = AutoregressiveDMLL._mlp(
-            c_hidden_size, n_mixtures[6]*3
-        )
+        self.centroid_layer_x = AutoregressiveDMLL._mlp(c_hidden_size, n_mixtures[0] * 3)
+        self.centroid_layer_y = AutoregressiveDMLL._mlp(c_hidden_size, n_mixtures[1] * 3)
+        self.centroid_layer_z = AutoregressiveDMLL._mlp(c_hidden_size, n_mixtures[2] * 3)
+        c_hidden_size = c_hidden_size + 64 * 3
+        self.angle_layer = AutoregressiveDMLL._mlp(c_hidden_size, n_mixtures[6] * 3)
         c_hidden_size = c_hidden_size + 64
-        self.size_layer_x = AutoregressiveDMLL._mlp(
-            c_hidden_size, n_mixtures[3]*3
-        )
-        self.size_layer_y = AutoregressiveDMLL._mlp(
-            c_hidden_size, n_mixtures[4]*3
-        )
-        self.size_layer_z = AutoregressiveDMLL._mlp(
-            c_hidden_size, n_mixtures[5]*3
-        )
+        self.size_layer_x = AutoregressiveDMLL._mlp(c_hidden_size, n_mixtures[3] * 3)
+        self.size_layer_y = AutoregressiveDMLL._mlp(c_hidden_size, n_mixtures[4] * 3)
+        self.size_layer_z = AutoregressiveDMLL._mlp(c_hidden_size, n_mixtures[5] * 3)
 
         self.bbox_output = bbox_output
 
     @staticmethod
     def _mlp(hidden_size, output_size):
         mlp_layers = [
-            nn.Linear(hidden_size, 2*hidden_size),
+            nn.Linear(hidden_size, 2 * hidden_size),
             nn.ReLU(),
-            nn.Linear(2*hidden_size, hidden_size),
+            nn.Linear(2 * hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, output_size)
+            nn.Linear(hidden_size, output_size),
         ]
         return nn.Sequential(*mlp_layers)
 
@@ -377,8 +346,8 @@ class AutoregressiveDMLL(Hidden2Output):
         nr_mix = pred.size(1) // 3
 
         probs = torch.softmax(pred[:, :nr_mix], dim=-1)
-        means = pred[:, nr_mix:2 * nr_mix]
-        scales = torch.nn.functional.elu(pred[:, 2*nr_mix:3*nr_mix]) + 1.0001
+        means = pred[:, nr_mix : 2 * nr_mix]
+        scales = torch.nn.functional.elu(pred[:, 2 * nr_mix : 3 * nr_mix]) + 1.0001
 
         return probs, means, scales
 
@@ -388,9 +357,9 @@ class AutoregressiveDMLL(Hidden2Output):
 
         c = self.fc_class_labels(class_labels)
         cf = torch.cat([x, c], dim=-1)
-        translations_x = self.centroid_layer_x(cf).reshape(B*L, -1)
-        translations_y = self.centroid_layer_y(cf).reshape(B*L, -1)
-        translations_z = self.centroid_layer_z(cf).reshape(B*L, -1)
+        translations_x = self.centroid_layer_x(cf).reshape(B * L, -1)
+        translations_y = self.centroid_layer_y(cf).reshape(B * L, -1)
+        translations_z = self.centroid_layer_z(cf).reshape(B * L, -1)
 
         dmll_params = {}
         p = AutoregressiveDMLL.get_dmll_params(translations_x)
@@ -418,7 +387,7 @@ class AutoregressiveDMLL(Hidden2Output):
         C = self.n_classes
 
         # Sample the class
-        class_probs = torch.softmax(class_labels, dim=-1).view(B*L, C)
+        class_probs = torch.softmax(class_labels, dim=-1).view(B * L, C)
         sampled_classes = torch.multinomial(class_probs, 1).view(B, L)
         return torch.eye(C, device=x.device)[sampled_classes]
 
@@ -432,9 +401,9 @@ class AutoregressiveDMLL(Hidden2Output):
         translations_y = self.centroid_layer_y(cf)
         translations_z = self.centroid_layer_z(cf)
 
-        t_x = sample_from_dmll(translations_x.reshape(B*L, -1))
-        t_y = sample_from_dmll(translations_y.reshape(B*L, -1))
-        t_z = sample_from_dmll(translations_z.reshape(B*L, -1))
+        t_x = sample_from_dmll(translations_x.reshape(B * L, -1))
+        t_y = sample_from_dmll(translations_y.reshape(B * L, -1))
+        t_z = sample_from_dmll(translations_z.reshape(B * L, -1))
         return torch.cat([t_x, t_y, t_z], dim=-1).view(B, L, 3)
 
     def sample_angles(self, x, class_labels, translations):
@@ -448,7 +417,7 @@ class AutoregressiveDMLL(Hidden2Output):
         tz = self.pe_trans_z(translations[:, :, 2:3])
         tf = torch.cat([cf, tx, ty, tz], dim=-1)
         angles = self.angle_layer(tf)
-        return sample_from_dmll(angles.reshape(B*L, -1)).view(B, L, 1)
+        return sample_from_dmll(angles.reshape(B * L, -1)).view(B, L, 1)
 
     def sample_sizes(self, x, class_labels, translations, angles):
         # Extract the sizes in local variables for convenience
@@ -467,9 +436,9 @@ class AutoregressiveDMLL(Hidden2Output):
         sizes_y = self.size_layer_y(sf)
         sizes_z = self.size_layer_z(sf)
 
-        s_x = sample_from_dmll(sizes_x.reshape(B*L, -1))
-        s_y = sample_from_dmll(sizes_y.reshape(B*L, -1))
-        s_z = sample_from_dmll(sizes_z.reshape(B*L, -1))
+        s_x = sample_from_dmll(sizes_x.reshape(B * L, -1))
+        s_y = sample_from_dmll(sizes_y.reshape(B * L, -1))
+        s_z = sample_from_dmll(sizes_z.reshape(B * L, -1))
         return torch.cat([s_x, s_y, s_z], dim=-1).view(B, L, 3)
 
     def pred_class_probs(self, x):
@@ -480,7 +449,7 @@ class AutoregressiveDMLL(Hidden2Output):
         c = self.n_classes
 
         # Sample the class
-        class_probs = torch.softmax(class_labels, dim=-1).view(b*l, c)
+        class_probs = torch.softmax(class_labels, dim=-1).view(b * l, c)
 
         return class_probs
 
@@ -492,8 +461,8 @@ class AutoregressiveDMLL(Hidden2Output):
             nr_mix = pred.size(1) // 3
 
             probs = torch.softmax(pred[:, :nr_mix], dim=-1)
-            means = pred[:, nr_mix:2 * nr_mix]
-            scales = torch.nn.functional.elu(pred[:, 2*nr_mix:3*nr_mix])
+            means = pred[:, nr_mix : 2 * nr_mix]
+            scales = torch.nn.functional.elu(pred[:, 2 * nr_mix : 3 * nr_mix])
             scales = scales + 1.0001
 
             return probs, means, scales
@@ -503,12 +472,11 @@ class AutoregressiveDMLL(Hidden2Output):
 
         c = self.fc_class_labels(class_labels)
         cf = torch.cat([x, c], dim=-1)
-        t_x = self.centroid_layer_x(cf).reshape(B*L, -1)
-        t_y = self.centroid_layer_y(cf).reshape(B*L, -1)
-        t_z = self.centroid_layer_z(cf).reshape(B*L, -1)
+        t_x = self.centroid_layer_x(cf).reshape(B * L, -1)
+        t_y = self.centroid_layer_y(cf).reshape(B * L, -1)
+        t_z = self.centroid_layer_z(cf).reshape(B * L, -1)
 
-        return dmll_params_from_pred(t_x), dmll_params_from_pred(t_y),\
-            dmll_params_from_pred(t_z)
+        return dmll_params_from_pred(t_x), dmll_params_from_pred(t_y), dmll_params_from_pred(t_z)
 
     def forward(self, x, sample_params):
         if self.with_extra_fc:
@@ -516,10 +484,7 @@ class AutoregressiveDMLL(Hidden2Output):
 
         # Extract the target properties from sample_params and embed them into
         # a higher dimensional space.
-        target_properties = \
-            AutoregressiveDMLL._extract_properties_from_target(
-                sample_params
-            )
+        target_properties = AutoregressiveDMLL._extract_properties_from_target(sample_params)
 
         class_labels = target_properties[0]
         translations = target_properties[1]
@@ -536,19 +501,11 @@ class AutoregressiveDMLL(Hidden2Output):
 
         cf = torch.cat([x, c], dim=-1)
         # Using the true class label we now want to predict the translations
-        translations = (
-            self.centroid_layer_x(cf),
-            self.centroid_layer_y(cf),
-            self.centroid_layer_z(cf)
-        )
+        translations = (self.centroid_layer_x(cf), self.centroid_layer_y(cf), self.centroid_layer_z(cf))
         tf = torch.cat([cf, tx, ty, tz], dim=-1)
         angles = self.angle_layer(tf)
         sf = torch.cat([tf, a], dim=-1)
-        sizes = (
-            self.size_layer_x(sf),
-            self.size_layer_y(sf),
-            self.size_layer_z(sf)
-        )
+        sizes = (self.size_layer_x(sf), self.size_layer_y(sf), self.size_layer_z(sf))
 
         return self.bbox_output(sizes, translations, angles, class_labels)
 
@@ -557,6 +514,7 @@ class FrozenBatchNorm2d(nn.Module):
     """A BatchNorm2d wrapper for Pytorch's BatchNorm2d where the batch
     statictis are fixed.
     """
+
     def __init__(self, num_features):
         super(FrozenBatchNorm2d, self).__init__()
         self.num_features = num_features
@@ -566,7 +524,7 @@ class FrozenBatchNorm2d(nn.Module):
         self.register_buffer("running_var", torch.ones(num_features))
 
     def extra_repr(self):
-        return '{num_features}'.format(**self.__dict__)
+        return "{num_features}".format(**self.__dict__)
 
     @classmethod
     def from_batch_norm(cls, bn):
@@ -585,13 +543,11 @@ class FrozenBatchNorm2d(nn.Module):
         if len(module_names) == 1:
             return getattr(m, module_names[0])
         else:
-            return FrozenBatchNorm2d._getattr_nested(
-                getattr(m, module_names[0]), module_names[1:]
-            )
+            return FrozenBatchNorm2d._getattr_nested(getattr(m, module_names[0]), module_names[1:])
 
     @staticmethod
     def freeze(m):
-        for (name, layer) in m.named_modules():
+        for name, layer in m.named_modules():
             if isinstance(layer, nn.BatchNorm2d):
                 nest = name.split(".")
                 if len(nest) == 1:
@@ -600,7 +556,7 @@ class FrozenBatchNorm2d(nn.Module):
                     setattr(
                         FrozenBatchNorm2d._getattr_nested(m, nest[:-1]),
                         nest[-1],
-                        FrozenBatchNorm2d.from_batch_norm(layer)
+                        FrozenBatchNorm2d.from_batch_norm(layer),
                     )
 
     def forward(self, x):
@@ -619,8 +575,8 @@ class FrozenBatchNorm2d(nn.Module):
 
 
 class BaseFeatureExtractor(nn.Module):
-    """Hold some common functions among all feature extractor networks.
-    """
+    """Hold some common functions among all feature extractor networks."""
+
     @property
     def feature_size(self):
         return self._feature_size
@@ -633,6 +589,7 @@ class ResNet18(BaseFeatureExtractor):
     """Build a feature extractor using the pretrained ResNet18 architecture for
     image based inputs.
     """
+
     def __init__(self, freeze_bn, input_channels, feature_size):
         super(ResNet18, self).__init__()
         self._feature_size = feature_size
@@ -642,34 +599,23 @@ class ResNet18(BaseFeatureExtractor):
             FrozenBatchNorm2d.freeze(self._feature_extractor)
 
         self._feature_extractor.conv1 = torch.nn.Conv2d(
-            input_channels,
-            64,
-            kernel_size=(7, 7),
-            stride=(2, 2),
-            padding=(3, 3),
-            bias=False
+            input_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
         )
 
-        self._feature_extractor.fc = nn.Sequential(
-            nn.Linear(512, 512), nn.ReLU(),
-            nn.Linear(512, self.feature_size)
-        )
+        self._feature_extractor.fc = nn.Sequential(nn.Linear(512, 512), nn.ReLU(), nn.Linear(512, self.feature_size))
         self._feature_extractor.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
 
 class FixedPositionalEncoding(nn.Module):
     def __init__(self, proj_dims, val=0.1):
         super().__init__()
-        ll = proj_dims//2
-        exb = 2 * torch.linspace(0, ll-1, ll) / proj_dims
+        ll = proj_dims // 2
+        exb = 2 * torch.linspace(0, ll - 1, ll) / proj_dims
         self.sigma = 1.0 / torch.pow(val, exb).view(1, -1)
         self.sigma = 2 * torch.pi * self.sigma
 
     def forward(self, x):
-        return torch.cat([
-            torch.sin(x * self.sigma.to(x.device)),
-            torch.cos(x * self.sigma.to(x.device))
-        ], dim=-1)
+        return torch.cat([torch.sin(x * self.sigma.to(x.device)), torch.cos(x * self.sigma.to(x.device))], dim=-1)
 
 
 class BaseAutoregressiveTransformer(nn.Module):
@@ -681,24 +627,17 @@ class BaseAutoregressiveTransformer(nn.Module):
             n_heads=config.get("n_heads", 12),
             query_dimensions=config.get("query_dimensions", 64),
             value_dimensions=config.get("value_dimensions", 64),
-            feed_forward_dimensions=config.get(
-                "feed_forward_dimensions", 3072
-            ),
+            feed_forward_dimensions=config.get("feed_forward_dimensions", 3072),
             attention_type="full",
-            activation="gelu"
+            activation="gelu",
         ).get()
 
-        self.register_parameter(
-            "start_token_embedding",
-            nn.Parameter(torch.randn(1, 512))
-        )
+        self.register_parameter("start_token_embedding", nn.Parameter(torch.randn(1, 512)))
 
         # TODO: Add the projection dimensions for the room features in the
         # config!!!
         self.feature_extractor = feature_extractor
-        self.fc_room_f = nn.Linear(
-            self.feature_extractor.feature_size, 512
-        )
+        self.fc_room_f = nn.Linear(self.feature_extractor.feature_size, 512)
 
         # Positional encoding for each property
         self.pe_pos_x = FixedPositionalEncoding(proj_dims=64)
@@ -730,7 +669,7 @@ class BaseAutoregressiveTransformer(nn.Module):
             "class_labels": start_class,
             "translations": torch.zeros(1, 1, 3, device=device),
             "sizes": torch.zeros(1, 1, 3, device=device),
-            "angles": torch.zeros(1, 1, 1, device=device)
+            "angles": torch.zeros(1, 1, 1, device=device),
         }
 
         return boxes
@@ -742,7 +681,7 @@ class BaseAutoregressiveTransformer(nn.Module):
             "class_labels": end_class,
             "translations": torch.zeros(1, 1, 3, device=device),
             "sizes": torch.zeros(1, 1, 3, device=device),
-            "angles": torch.zeros(1, 1, 1, device=device)
+            "angles": torch.zeros(1, 1, 1, device=device),
         }
 
     def start_symbol_features(self, B, room_mask):
@@ -764,9 +703,7 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
     def __init__(self, input_dims, hidden2output, feature_extractor, config):
         super().__init__(input_dims, hidden2output, feature_extractor, config)
         # Embedding to be used for the empty/mask token
-        self.register_parameter(
-            "empty_token_embedding", nn.Parameter(torch.randn(1, 512))
-        )
+        self.register_parameter("empty_token_embedding", nn.Parameter(torch.randn(1, 512)))
 
     def forward(self, sample_params):
         # Unpack the sample_params
@@ -797,16 +734,11 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
 
         start_symbol_f = self.start_symbol_features(B, room_layout)
         # Concatenate with the mask embedding for the start token
-        X = torch.cat([
-            start_symbol_f, self.empty_token_embedding.expand(B, -1, -1), X
-        ], dim=1)
+        X = torch.cat([start_symbol_f, self.empty_token_embedding.expand(B, -1, -1), X], dim=1)
         X = self.fc(X)
 
         # Compute the features using causal masking
-        lengths = LengthMask(
-            sample_params["lengths"]+2,
-            max_len=X.shape[1]
-        )
+        lengths = LengthMask(sample_params["lengths"] + 2, max_len=X.shape[1])
         F = self.transformer_encoder(X, length_mask=lengths)
         return self.hidden2output(F[:, 1:2], sample_params)
 
@@ -819,9 +751,7 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
 
         if class_labels.shape[1] == 1:
             start_symbol_f = self.start_symbol_features(B, room_mask)
-            X = torch.cat([
-                start_symbol_f, self.empty_token_embedding.expand(B, -1, -1)
-            ], dim=1)
+            X = torch.cat([start_symbol_f, self.empty_token_embedding.expand(B, -1, -1)], dim=1)
         else:
             # Apply the positional embeddings only on bboxes that are not the
             # start token
@@ -843,9 +773,7 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
 
             start_symbol_f = self.start_symbol_features(B, room_mask)
             # Concatenate with the mask embedding for the start token
-            X = torch.cat([
-                start_symbol_f, self.empty_token_embedding.expand(B, -1, -1), X
-            ], dim=1)
+            X = torch.cat([start_symbol_f, self.empty_token_embedding.expand(B, -1, -1), X], dim=1)
         X = self.fc(X)
         F = self.transformer_encoder(X, length_mask=None)[:, 1:2]
 
@@ -861,23 +789,28 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
         # Sample the translations
         translations = self.hidden2output.sample_translations(F, class_labels)
         # Sample the angles
-        angles = self.hidden2output.sample_angles(
-            F, class_labels, translations
-        )
+        angles = self.hidden2output.sample_angles(F, class_labels, translations)
         # Sample the sizes
-        sizes = self.hidden2output.sample_sizes(
-            F, class_labels, translations, angles
-        )
+        sizes = self.hidden2output.sample_sizes(F, class_labels, translations, angles)
 
-        return {
-            "class_labels": class_labels,
-            "translations": translations,
-            "sizes": sizes,
-            "angles": angles
-        }
+        return {"class_labels": class_labels, "translations": translations, "sizes": sizes, "angles": angles}
 
     @torch.no_grad()
     def generate_boxes(self, room_mask, max_boxes=32, device="cpu"):
+        """
+        Generates scene given room mask, generating coarse masks for each object.
+
+        :param room_mask: float tensor representing binary room mask, with 1s in valid positions and 0s otherwise
+        :param max_boxes: maximum number of objects to generate, defaults to 32
+        :param device: device on which to move tensors and perform computation, defaults to "cpu"
+        :return: dict of tensors in the form
+            {
+                "class_labels": tensor of class labels of objects,
+                "translations": tensor of positions of objects in scene,
+                "sizes": tensor of approximate sizes of objects in scene,
+                "angles": tensor of rotation matrix to apply to each object in scene
+            }
+        """
         room_mask.to(device)
         boxes = self.start_symbol(device)
         for i in range(max_boxes):
@@ -894,12 +827,10 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
             "class_labels": boxes["class_labels"].to("cpu"),
             "translations": boxes["translations"].to("cpu"),
             "sizes": boxes["sizes"].to("cpu"),
-            "angles": boxes["angles"].to("cpu")
+            "angles": boxes["angles"].to("cpu"),
         }
 
-    def autoregressive_decode_with_class_label(
-        self, boxes, room_mask, class_label
-    ):
+    def autoregressive_decode_with_class_label(self, boxes, room_mask, class_label):
         class_labels = boxes["class_labels"]
         B, _, C = class_labels.shape
 
@@ -914,20 +845,11 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
         # Sample the translations conditioned on the query_class_label
         translations = self.hidden2output.sample_translations(F, class_label)
         # Sample the angles
-        angles = self.hidden2output.sample_angles(
-            F, class_label, translations
-        )
+        angles = self.hidden2output.sample_angles(F, class_label, translations)
         # Sample the sizes
-        sizes = self.hidden2output.sample_sizes(
-            F, class_label, translations, angles
-        )
+        sizes = self.hidden2output.sample_sizes(F, class_label, translations, angles)
 
-        return {
-            "class_labels": class_label,
-            "translations": translations,
-            "sizes": sizes,
-            "angles": angles
-        }
+        return {"class_labels": class_label, "translations": translations, "sizes": sizes, "angles": angles}
 
     @torch.no_grad()
     def add_object(self, room_mask, class_label, boxes=None, device="cpu"):
@@ -950,11 +872,7 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
             boxes[k] = torch.cat([start_box[k], boxes[k]], dim=1)
 
         # Based on the query class label sample the location of the new object
-        box = self.autoregressive_decode_with_class_label(
-            boxes=boxes,
-            room_mask=room_mask,
-            class_label=class_label
-        )
+        box = self.autoregressive_decode_with_class_label(boxes=boxes, room_mask=room_mask, class_label=class_label)
 
         for k in box.keys():
             boxes[k] = torch.cat([boxes[k], box[k]], dim=1)
@@ -968,17 +886,11 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
             "class_labels": boxes["class_labels"],
             "translations": boxes["translations"],
             "sizes": boxes["sizes"],
-            "angles": boxes["angles"]
+            "angles": boxes["angles"],
         }
 
     @torch.no_grad()
-    def complete_scene(
-        self,
-        boxes,
-        room_mask,
-        max_boxes=100,
-        device="cpu"
-    ):
+    def complete_scene(self, boxes, room_mask, max_boxes=100, device="cpu"):
         boxes = dict(boxes.items())
 
         # Create the initial input to the transformer, namely the start token
@@ -1001,16 +913,10 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
             "class_labels": boxes["class_labels"],
             "translations": boxes["translations"],
             "sizes": boxes["sizes"],
-            "angles": boxes["angles"]
+            "angles": boxes["angles"],
         }
 
-    def autoregressive_decode_with_class_label_and_translation(
-        self,
-        boxes,
-        room_mask,
-        class_label,
-        translation
-    ):
+    def autoregressive_decode_with_class_label_and_translation(self, boxes, room_mask, class_label, translation):
         class_labels = boxes["class_labels"]
         B, _, C = class_labels.shape
 
@@ -1025,26 +931,12 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
         # Sample the angles
         angles = self.hidden2output.sample_angles(F, class_label, translation)
         # Sample the sizes
-        sizes = self.hidden2output.sample_sizes(
-            F, class_label, translation, angles
-        )
+        sizes = self.hidden2output.sample_sizes(F, class_label, translation, angles)
 
-        return {
-            "class_labels": class_label,
-            "translations": translation,
-            "sizes": sizes,
-            "angles": angles
-        }
+        return {"class_labels": class_label, "translations": translation, "sizes": sizes, "angles": angles}
 
     @torch.no_grad()
-    def add_object_with_class_and_translation(
-        self,
-        boxes,
-        room_mask,
-        class_label,
-        translation,
-        device="cpu"
-    ):
+    def add_object_with_class_and_translation(self, boxes, room_mask, class_label, translation, device="cpu"):
         boxes = dict(boxes.items())
 
         # Make sure that the provided class_label will have the correct format
@@ -1058,7 +950,6 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
         # namely (batch_size, 1, n_classes)
         assert class_label.shape == (1, 1, self.n_classes)
 
-
         # Create the initial input to the transformer, namely the start token
         start_box = self.start_symbol(device)
         for k in start_box.keys():
@@ -1066,10 +957,7 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
 
         # Based on the query class label sample the location of the new object
         box = self.autoregressive_decode_with_class_label_and_translation(
-            boxes=boxes,
-            class_label=class_label,
-            translation=translation,
-            room_mask=room_mask
+            boxes=boxes, class_label=class_label, translation=translation, room_mask=room_mask
         )
 
         for k in box.keys():
@@ -1084,7 +972,7 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
             "class_labels": boxes["class_labels"],
             "translations": boxes["translations"],
             "sizes": boxes["sizes"],
-            "angles": boxes["angles"]
+            "angles": boxes["angles"],
         }
 
     @torch.no_grad()
@@ -1102,13 +990,7 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
         return self.hidden2output.pred_class_probs(F)
 
     @torch.no_grad()
-    def distribution_translations(
-        self,
-        boxes,
-        room_mask, 
-        class_label,
-        device="cpu"
-    ):
+    def distribution_translations(self, boxes, room_mask, class_label, device="cpu"):
         # Shallow copy the input dictionary
         boxes = dict(boxes.items())
 
@@ -1134,14 +1016,12 @@ class AutoregressiveTransformer(BaseAutoregressiveTransformer):
         F = self._encode(boxes, room_mask)
 
         # Get the dmll params for the translations
-        return self.hidden2output.pred_dmll_params_translation(
-            F, class_label
-        )
+        return self.hidden2output.pred_dmll_params_translation(F, class_label)
 
 
 def atiss_network(config):
     n_classes = len(config["data"]["classes"])
-    feature_size = 7 + n_classes #  translation (3) + size (3) + rotation (1) + one-hot-class-encoding
+    feature_size = 7 + n_classes  #  translation (3) + size (3) + rotation (1) + one-hot-class-encoding
     hidden2output_layer = AutoregressiveDMLL(
         config["network"].get("hidden_dims", 768),
         n_classes,
@@ -1152,28 +1032,22 @@ def atiss_network(config):
     feature_extractor = ResNet18(
         freeze_bn=config["feature_extractor"].get("freeze_bn", True),
         input_channels=config["feature_extractor"].get("input_channels", 1),
-        feature_size=config["feature_extractor"].get("feature_size", 256)
+        feature_size=config["feature_extractor"].get("feature_size", 256),
     )
-    network = AutoregressiveTransformer(
-        feature_size,
-        hidden2output_layer,
-        feature_extractor,
-        config["network"]
-    )
+    network = AutoregressiveTransformer(feature_size, hidden2output_layer, feature_extractor, config["network"])
     # Check whether there is a weight file provided to continue training from
     weight_file = config.get("weight_file", None)
     device = config.get("device", "cpu")
     if weight_file is not None:
         print("Loading weight file from {}".format(weight_file))
-        network.load_state_dict(
-            torch.load(weight_file, map_location=device)
-        )
+        network.load_state_dict(torch.load(weight_file, map_location=device))
     network.to(device)
 
     return network
 
 
 # dataset-related
+
 
 def descale(x, minimum, maximum):
     x = (x + 1) / 2
@@ -1184,17 +1058,8 @@ def descale(x, minimum, maximum):
 def descale_bbox_params(bounds, s):
     sample_params = {}
     for k, v in s.items():
-        if k == "room_layout" or k == "class_labels":
+        if k == "room_layout" or k == "class_labels" or k == "objfeats":
             sample_params[k] = v
         else:
-            sample_params[k] = descale(
-                v, np.asarray(bounds[k][0]), np.asarray(bounds[k][1])
-            )
+            sample_params[k] = descale(v, np.asarray(bounds[k][0]), np.asarray(bounds[k][1]))
     return sample_params
-
-
-def square_room_mask(room_dim=64, floor_perc=0.8):
-    pad = round((1 - floor_perc) * room_dim)
-    room_mask = torch.zeros(size=(1, 1, 64, 64), dtype=torch.float32)
-    room_mask[0, 0, pad:(room_dim-pad), pad:(room_dim-pad)] = 1.0
-    return room_mask

@@ -1,10 +1,15 @@
-import numpy as np
+import os
 
+import numpy as np
+import pybullet as p
+import pygltflib
 from scipy.spatial.transform import Rotation
+
+from libsg.simulator import Simulator
 from libsg.geo import Transform
 
 class SimScene:
-    def __init__(self, sim, scene, asset_paths, include_ground=False):
+    def __init__(self, sim: Simulator, scene, asset_paths, include_ground=False):
         self.sim = sim
         self.scene = scene
         self.asset_paths = asset_paths
@@ -70,13 +75,67 @@ class SimScene:
         return sim.add_box(obj_id=node.id, half_extents=half_extents,
                         transform=transform, static=True)
 
+    @staticmethod
+    def convert_glb_to_obj(glb_path, obj_path):
+        import struct
+        # Load the glb file
+        glb = pygltflib.GLTF2().load(glb_path)
+
+        # get the first mesh in the current scene (in this example there is only one scene and one mesh)
+        mesh = glb.meshes[glb.scenes[glb.scene].nodes[0]]
+
+        # get the vertices for each primitive in the mesh (in this example there is only one)
+        all_triangles = []
+        vertices = []
+        for primitive in mesh.primitives:
+            triangles_accessor = glb.accessors[primitive.indices]
+            triangles_buffer_view = glb.bufferViews[triangles_accessor.bufferView]
+            triangles = np.frombuffer(
+                glb.binary_blob()[
+                    triangles_buffer_view.byteOffset
+                    + triangles_accessor.byteOffset : triangles_buffer_view.byteOffset
+                    + triangles_buffer_view.byteLength
+                ],
+                dtype="uint8",
+                count=triangles_accessor.count,
+            )
+            triangles = triangles.reshape((-1, 3))
+            all_triangles.extend(triangles.tolist())
+
+            # get the binary data for this mesh primitive from the buffer
+            accessor = glb.accessors[primitive.attributes.POSITION]
+            bufferView = glb.bufferViews[accessor.bufferView]
+            buffer = glb.buffers[bufferView.buffer]
+            data = glb.get_data_from_buffer_uri(buffer.uri)
+
+            # pull each vertex from the binary buffer and convert it into a tuple of python floats
+            for i in range(accessor.count):
+                index = bufferView.byteOffset + accessor.byteOffset + i*12  # the location in the buffer of this vertex
+                d = data[index:index+12]  # the vertex data
+                v = struct.unpack("<fff", d)   # convert from base64 to three floats
+                vertices.append(v)
+                print(i, v)
+
+        # convert a numpy array for some manipulation
+
+        # Write to obj file
+        os.makedirs(os.path.dirname(obj_path), exist_ok=True)
+        with open(obj_path, 'w') as obj_file:
+            for vertex in vertices:
+                obj_file.write(f"v {vertex[0]} {vertex[1]} {vertex[2]}\n")
+
+            for triangle in triangles:
+                obj_file.write(f"f {triangle[0]+1} {triangle[1]+1} {triangle[2]+1}\n")
 
     @staticmethod
-    def add_object(sim, data_dir, node, static):
+    def add_object(sim: Simulator, data_dir, node, static):
         model_id = node.model_id.split('.')[1]
         if len(model_id) < 16:  # skip windows/doors
             return
         transform = node.transform
-        col_obj_filename = f'{data_dir}/{model_id}.obj'
+        col_obj_filename = os.path.join(data_dir, "obj", f"{model_id}.obj")
+        if not os.path.exists(col_obj_filename):
+            col_glb_filename = os.path.join(data_dir, model_id[0], f"{model_id}.collider.glb")
+            SimScene.convert_glb_to_obj(col_glb_filename, col_obj_filename)
         return sim.add_mesh(obj_id=node.id, obj_file=col_obj_filename,
                             transform=transform, vis_mesh_file=None, static=static)

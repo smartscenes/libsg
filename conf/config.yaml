@@ -1,22 +1,22 @@
-base_dir: ???
+base_dir: "/datasets/internal/hssd"
 
 scene_builder:
   arch_db:
     path: null
   scene_db:
-    path: "${base_dir}/stk/scenestate"
+    path: "${base_dir}/fpsb/scenes/cluttered/scenestate"
   model_db:
     source: "fpModel"
-    mesh_dir: "${base_dir}/object-noq"
-    collision_mesh_dir: "${base_dir}/convex/furniture-coacd-tp2"
+    mesh_dir: "${base_dir}/fphab/objects"
+    collision_mesh_dir: "${base_dir}/fphab/objects"
     defaults:
       up: [0, 1, 0]
       front: [0, 0, 1]
-  solr_url: ???
+  solr_url: "https://aspis.cmpt.sfu.ca/scene-toolkit-three/solr"
 
 defaults:
   - _self_
-  - generator@atiss: atiss
+  - layout_generator@layout: layout_mapping
 
 hydra:
   # disable changing of cwd as it interferes with flask auto-restart

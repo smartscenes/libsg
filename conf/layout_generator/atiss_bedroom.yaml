@@ -1,12 +1,16 @@
-weight_file: ${oc.env:HOME}/work/atiss/atiss/model_02000
+weight_file: .data/models/atiss/bedroom/model_00400.zip
+# weight_file: .data/models/atiss/bedroom-old/model_02000
 
 data:
   room_layout_size: "64,64"
   bounds: {sizes: [[0.03998288, 0.02000002, 0.012772], [2.8682, 1.770065, 1.698315]], translations: [[-2.7625005, 0.045, -2.75275], [2.77844175, 3.6248396, 2.81854277]], angles: [-3.14159265, 3.14159265]}
   classes: [armchair.n.01, bookcase.n.01, cabinet.n.01, ceiling_lamp.n.01, chair.n.01, cabinet.n.01, coffee_table.n.01, desk.n.01, double_bed.n.01, chair.n.01, dressing_table.n.01, bunk_bed.n.01, nightstand.n.01, pendant_lamp.n.01, shelf.n.01, single_bed.n.01, sofa.n.01, stool.n.01, table.n.02, tv_stand.n.01, wardrobe.n.01, start, end]
+  up_axis: "y"
+export_room_mask: false
 
 network:
-  n_layers: 4
+  name: "ATISS"
+  n_layers: 2
   n_heads: 8
   query_dimensions: 64
   value_dimensions: 64

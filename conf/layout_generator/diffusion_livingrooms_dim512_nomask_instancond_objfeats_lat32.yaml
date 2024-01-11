@@ -1,0 +1,106 @@
+weight_file: .data/models/diffuscene/livingroom/last.ckpt
+
+data:
+    bounds: {sizes: [[0.03998999999999997, 0.020000020334800084, 0.0328434999999998], [2.3802699999999994, 1.7700649999999998, 1.3224289999999996]], translations: [[-5.672918693230125, 0.0375, -5.716401580065309], [5.09667921844729, 3.3577405149437496, 5.4048500000000015]], angles: [-3.14159265, 3.14159265], objfeats: [0.9682748913764954, -4.703158855438232, 5.720307350158691]}
+    dataset_type: "cached_threedfront"
+    encoding_type: "cached_diffusion_cosin_angle_wocm" #"cached_diffusion_wocm_no_prm"
+    dataset_directory: "/cluster/balrog/jtang/3d_front_processed/livingrooms_objfeats_32_64"
+    annotation_file: "../config/livingroom_threed_front_splits.csv"
+    path_to_invalid_scene_ids: "../config/invalid_threed_front_rooms.txt"
+    path_to_invalid_bbox_jids: "../config/black_list.txt"
+    augmentations: ["fixed_rotations"]
+    filter_fn: "threed_front_livingroom" # "no_filtering"
+    train_stats: "dataset_stats.txt"
+    room_layout_size: "64,64"
+    max_length: 21
+    classes: [armchair.n.01, bookcase.n.01, cabinet.n.01, ceiling_lamp.n.01, chaise_longue.n.01, chair.n.01, coffee_table.n.01, console_table.n.01, table.n.02, desk.n.01, chair.n.01, dining_table.n.01, l-shaped_couch.n.01, sofa.n.01, chair.n.01, chair.n.01, sofa.n.01, pendant_lamp.n.01, end_table.n.01, shelf.n.01, stool.n.01, tv_stand.n.01, wardrobe.n.01, wine_rack.n.01, start, end]
+    up_axis: "y"
+export_room_mask: false
+
+network:
+    type: "diffusion_scene_layout_ddpm"
+    # denoising network
+    net_type: "unet1d"
+
+    # concate squarewish layer
+    point_dim: 65 #29
+    latent_dim: 0
+    room_mask_condition: true # not use room_mask 
+    sample_num_points: 21 # max_length 
+
+    objectness_dim: 0
+    objfeat_dim: 32
+    class_dim: 25  #24+1
+    angle_dim: 2 
+
+    # class condition
+    learnable_embedding: true
+    instance_condition: true
+    instance_emb_dim: 128
+    class_condition: false
+    class_emb_dim: 128
+
+    # diffusion config
+    diffusion_kwargs:
+        schedule_type: 'linear'
+        beta_start: 0.0001
+        beta_end: 0.02
+        time_num: 1000 
+        loss_type: 'mse'
+        model_mean_type: 'eps'
+        model_var_type: 'fixedsmall'
+        loss_separate: true
+        loss_iou: true
+        train_stats_file: ".data/models/diffuscene/livingroom/dataset_stats.txt"
+
+    net_kwargs:
+        dim: 512
+        dim_mults: [1, 1, 1, 1]
+        channels: 65
+        objectness_dim: 0
+        objfeat_dim: 32
+        class_dim: 25
+        angle_dim: 2
+        context_dim: 0
+        instanclass_dim: 128 
+        seperate_all: true  # separate all
+        # self_condition: true
+        # merge_bbox: true 
+        # modulate_time_context_instanclass: true
+
+feature_extractor:
+    name: "resnet18"
+    feature_size: 64
+    freeze_bn: true
+    input_channels: 1
+
+training:
+    splits: ["train", "val"]
+    epochs: 150000
+    steps_per_epoch: 500
+    batch_size: 128
+    save_frequency: 2000
+    max_grad_norm: 10
+    # optimizer
+    optimizer: Adam
+    weight_decay: 0.0
+    # schedule
+    schedule: 'step'
+    lr: 0.0002
+    lr_step: 20000
+    lr_decay: 0.5
+
+validation:
+    splits: ["test"]
+    frequency: 10
+    batch_size: 128
+    gen_traj: false
+    num_step: 100
+    gen_gt: false
+    gen_prob_map: false
+
+logger:
+    type: "wandb"
+    project: "diffuscene"
+ 
+clip_denoised: true

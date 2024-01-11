@@ -1,109 +1,25 @@
-from libsg.scene_types import (SceneState, SceneContext, ObjectInstance,
-                               ObjectSpec, PlacementSpec, MoveSpec, RemoveSpec,
-                               SceneSpec, SceneModifySpec)
-
-
 """
-API for manipulating single object.
-Can extend to handle object groups (ObjectSpec -> ObjectGroupSpec)
-"""
+api.py
+------
+The internal facing API for the text-to-scene application. This API will assume calls are being made internally using
+the class specifications defined for the backend rather than for HTTP requests. The internal API may also expose
+some additional parameters which are not made available to external users for the sake of simplifying the user-facing
+interface.
 
-# @app.route('/object/add')
-def object_add(scene_state: SceneState,
-               object_spec: ObjectSpec,
-               placement_spec: PlacementSpec) -> SceneState:
-    #TODO add ObjectInstance matching object_spec to scene, return scene
-    return SceneState()
+Examples of JSON payloads to below endpoints
 
-# @app.route('/object/remove')
-def object_remove(scene_state: SceneState,
-                  object_spec: ObjectSpec,
-                  remove_spec: RemoveSpec) -> SceneState:
-    #TODO match object_spec to object in scene, remove and return scene
-    return SceneState()
+# SceneSpec
+{  
+   "type": "category"           # room type
+   "input": "bedroom"           # actual input
+   "format": "STK"              # STK json scene-state (other formats such as HAB is also supported)
+}
 
-# @app.route('/object/replace')
-def object_replace(scene_state: SceneState,
-                   object_spec: ObjectSpec,
-                   new_object_spec: ObjectSpec) -> SceneState:
-    # remove object matching object_spec, replace with new_object_spec
-    scene_no_obj = object_remove(scene_state, object_spec)
-    return object_add(scene_no_obj, new_object_spec)
-
-# @app.route('/object/move')
-def object_move(scene_state: SceneState,
-                object_spec: ObjectSpec,
-                move_spec: MoveSpec) -> SceneState:
-    return ObjectInstance()
-
-# @app.route('/object/retrieve')
-def object_retrieve(object_spec: ObjectSpec) -> SceneState:
-    return ObjectInstance()
-
-# @app.route('/object/suggest')
-def object_suggest(object_spec: ObjectSpec,
-                   context: SceneContext) -> SceneState:
-    return ObjectInstance()
-
-
-"""
-Operators at the architecture level.
-"""
-
-# @app.route('/arch/generate')
-def arch_generate():
-    pass
-
-# @app.route('/arch/modify')
-def arch_modify():
-    pass
-
-# @app.route('/arch/retrieve')
-def arch_retrieve():
-    pass
-
-
-"""
-Operators at the scene level.
-"""
-
-# @app.route('/scene/generate')
-def scene_generate(scene_spec: SceneSpec) -> SceneState:
-    #TODO generate SceneState corresponding to scene_spec
-    pass
-
-# @app.route('/scene/modify')
-def scene_modify(scene_state: SceneState, modify_spec: SceneModifySpec) -> SceneState:
-    pass
-
-# @app.route('/scene/retrieve')
-def scene_retrieve(scene_spec: SceneSpec) -> SceneState:
-    #TODO retrieve SceneState corresponding to scene_spec
-    return SceneState()
-
-
-"""
-Free form text-based API.
-A type field indicates input specification type and model/strategy to follow
-Common arguments: spec_type (text/language code, template), strategy (how to generate/modify/retrieve),
-"""
-
-# @app.route('/generate')
-def generate():
-    pass
-
-# @app.route('/modify')
-def modify():
-# /scene/modify: initial_scene_state, modification: text
-    pass
-
-# /scene/retrieve
-# @app.route('/retrieve')
-def retrieve():
-    pass
-
-"""
-Examples of JSON payloads to above endpoints
+{  
+   "type": "text"                                                # free-form text
+   "input": "a bedroom with a bed and two nightstands"           # actual input
+   "format": "STK"              # STK json scene-state (other formats such as HAB is also supported)
+}
 
 # ObjectSpec
 {
@@ -130,7 +46,7 @@ Examples of JSON payloads to above endpoints
 }
 {
     "type": "placement_relation",  # a placement defined by relation to reference object
-    "relation": "on|next",  # TODO: expand/refine relation classes
+    "relation": "on|next",         # TODO: expand/refine relation classes
     "reference": ObjectSpec
 }
 
@@ -150,5 +66,175 @@ Examples of JSON payloads to above endpoints
     "remove_children": True  # whether supported objects (e.g., dishes on table) should be removed
     # TODO: expand into more refined strategies for handling adjustments to scene post-removal
 }
+"""
+
+from typing import Any, Optional
+
+from libsg.scene_types import (
+    JSONDict,
+    SceneState,
+    SceneContext,
+    ObjectSpec,
+    PlacementSpec,
+    MoveSpec,
+    SceneSpec,
+    SceneLayoutSpec,
+    SceneLayout,
+    SceneModifySpec,
+)
+from libsg.scene_builder import SceneBuilder
+from libsg.scene_parser import SceneParser
+from libsg.config import config as cfg
+
 
 """
+API for manipulating single object.
+Can extend to handle object groups (ObjectSpec -> ObjectGroupSpec)
+"""
+
+
+# @app.route('/object/add')
+def object_add(scene_state: SceneState, object_spec: ObjectSpec, placement_spec: PlacementSpec) -> SceneState:
+    raise NotImplementedError("Not tested")
+
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout)
+    return scene_builder.object_add(scene_state, object_spec, placement_spec)
+
+
+# @app.route('/object/remove')
+def object_remove(scene_state: SceneState, object_spec: ObjectSpec) -> SceneState:
+    # TODO: may want to add back RemoveSpec argument
+    # TODO match object_spec to object in scene, remove and return scene
+    raise NotImplementedError("Not tested")
+
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout)
+    new_scene_state = scene_builder.object_remove(scene_state, object_spec)
+    return new_scene_state
+
+
+# @app.route('/object/replace')
+def object_replace(scene_state: SceneState, object_spec: ObjectSpec, new_object_spec: ObjectSpec) -> SceneState:
+    # remove object matching object_spec, replace with new_object_spec
+    raise NotImplementedError("Not tested")
+
+    scene_no_obj = object_remove(scene_state, object_spec)
+    return object_add(scene_no_obj, new_object_spec)
+
+
+# @app.route('/object/move')
+def object_move(scene_state: SceneState, object_spec: ObjectSpec, move_spec: MoveSpec) -> SceneState:
+    raise NotImplementedError
+
+
+# @app.route('/object/retrieve')
+def object_retrieve(object_spec: ObjectSpec) -> SceneState:
+    raise NotImplementedError
+
+
+# @app.route('/object/generate')
+def object_generate(object_spec: ObjectSpec) -> SceneState:
+    raise NotImplementedError
+
+
+# @app.route('/object/suggest')
+def object_suggest(object_spec: ObjectSpec, context: SceneContext) -> SceneState:
+    raise NotImplementedError
+
+
+"""
+Operators at the architecture level.
+"""
+
+
+# @app.route('/arch/generate')
+def arch_generate():
+    raise NotImplementedError
+
+
+# @app.route('/arch/modify')
+def arch_modify():
+    raise NotImplementedError
+
+
+# @app.route('/arch/retrieve')
+def arch_retrieve():
+    raise NotImplementedError
+
+
+"""
+Operators at the scene level.
+"""
+
+
+def scene_generate_layout(layout_spec: SceneLayoutSpec, model_name: Optional[str] = None) -> SceneLayout:
+    """Generate course scene layout given architecture and layout parameters.
+
+    :param layout_spec: specification for layout architecture
+    :param model_name: name of model to use. If not specified, model specified in config will be used.
+    :return: list of objects of the form
+            {
+                'wnsynsetkey': name of object class,
+                'dimensions': dimensions of object as (x, y, z),
+                'position': position of object in scene as (x, y, z),
+                'orientation': rotation angle to apply to each object in radians,
+            }
+    """
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout)
+    layout = scene_builder.generate_layout(layout_spec, model_name)
+    return layout
+
+
+# @app.route('/scene/generate')
+def scene_generate(scene_spec: SceneSpec) -> JSONDict:
+    """Generate a scene with architecture and objects given prompt specification.
+
+    :param scene_spec: specification of scene to generate
+    :return: scene state object specifying architecture and objects to use in scene, and their locations
+    """
+    scene_spec = SceneParser().parse(scene_spec)
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout)
+    scene_state = scene_builder.generate(scene_spec)
+    return scene_state
+
+
+# @app.route('/scene/modify')
+def scene_modify(scene_state: SceneState, modify_spec: SceneModifySpec) -> SceneState:
+    raise NotImplementedError
+
+
+# @app.route('/scene/retrieve')
+def scene_retrieve(scene_spec: SceneSpec) -> SceneState:
+    """Retrieve scene by ID.
+
+    TODO: API not tested yet
+
+    :param scene_spec: specification of scene to retrieve
+    :return: scene state object specifying architecture and objects to use in scene, and their locations
+    """
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout)
+    scene_state = scene_builder.retrieve(scene_spec)
+    return scene_state
+
+
+"""
+Free form text-based API.
+A type field indicates input specification type and model/strategy to follow
+Common arguments: spec_type (text/language code, template), strategy (how to generate/modify/retrieve),
+"""
+
+
+# @app.route('/generate')
+def generate():
+    raise NotImplementedError
+
+
+# @app.route('/modify')
+def modify():
+    # /scene/modify: initial_scene_state, modification: text
+    raise NotImplementedError
+
+
+# /scene/retrieve
+# @app.route('/retrieve')
+def retrieve():
+    raise NotImplementedError

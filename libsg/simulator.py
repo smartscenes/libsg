@@ -177,6 +177,7 @@ class Simulator:
         return BBox3D.from_min_max(min, max)
 
     def get_aabb_all(self):
+        """Get axis-aligned bounding box (AABB) of all objects in scene"""
         points = []
         for obj_id, body in self._obj_id_to_body.items():
             min, max = p.getAABB(bodyUniqueId=body.bid, physicsClientId=self._pid)

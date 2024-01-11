@@ -1,0 +1,13 @@
+default_model: DiffuScene
+export_layout: false
+config:
+  ATISS:
+    load_by_spec: true
+    bedroom: atiss_bedroom.yaml
+    dining_room: atiss_diningroom.yaml
+    living_room: atiss_livingroom.yaml
+  DiffuScene:
+    load_by_spec: true
+    bedroom: diffusion_bedrooms_dim512_nomask_instancond_objfeats_lat32.yaml
+    dining_room: diffusion_diningrooms_dim512_nomask_instancond_objfeats_lat32.yaml
+    living_room: diffusion_livingrooms_dim512_nomask_instancond_objfeats_lat32.yaml

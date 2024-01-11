@@ -1,0 +1,102 @@
+weight_file: .data/models/diffuscene/bedroom/last.ckpt
+
+data:
+    bounds: {sizes: [[0.0399828836528625, 0.020000020334800084, 0.012771999999999964], [2.8682, 1.7700649999999998, 1.698315]], translations: [[-2.762500499999998, 0.045, -2.7527500000000007], [2.778441746198965, 3.6248395981292725, 2.818542771063899]], angles: [-3.14159265, 3.14159265], objfeats: [0.9786473512649536, -4.703158855438232, 5.720307350158691]}
+    dataset_type: "cached_threedfront"
+    encoding_type: "cached_diffusion_cosin_angle_objfeatsnorm_lat32_wocm" #"cached_diffusion_wocm_no_prm"
+    dataset_directory: "/cluster/balrog/jtang/3d_front_processed/bedrooms_objfeats_32_64"
+    annotation_file: "../config/bedroom_threed_front_splits.csv"
+    path_to_invalid_scene_ids: "../config/invalid_threed_front_rooms.txt"
+    path_to_invalid_bbox_jids: "../config/black_list.txt"
+    augmentations: ["fixed_rotations"]
+    filter_fn: "threed_front_bedroom" #"no_filtering"
+    train_stats: "dataset_stats.txt"
+    room_layout_size: "64,64"
+    classes: [armchair.n.01, bookcase.n.01, cabinet.n.01, ceiling_lamp.n.01, chair.n.01, cabinet.n.01, coffee_table.n.01, desk.n.01, double_bed.n.01, chair.n.01, dressing_table.n.01, bunk_bed.n.01, nightstand.n.01, pendant_lamp.n.01, shelf.n.01, single_bed.n.01, sofa.n.01, stool.n.01, table.n.02, tv_stand.n.01, wardrobe.n.01, start, end]
+    up_axis: "y"
+export_room_mask: false
+
+network:
+    type: "diffusion_scene_layout_ddpm"
+    # denoising network
+    net_type: "unet1d"
+
+    # concate squarewish layer
+    point_dim: 62 #29
+    latent_dim: 0
+    room_mask_condition: true # not use room_mask 
+    sample_num_points: 12 # max_length 
+
+    objectness_dim: 0
+    class_dim: 22
+    angle_dim: 2
+    objfeat_dim: 32 
+
+    # class condition
+    learnable_embedding: true
+    instance_condition: true
+    instance_emb_dim: 128
+    # diffusion config
+    diffusion_kwargs:
+        schedule_type: 'linear'
+        beta_start: 0.0001
+        beta_end: 0.02
+        time_num: 1000 
+        loss_type: 'mse'
+        model_mean_type: 'eps'
+        model_var_type: 'fixedsmall'
+        loss_separate: true
+        loss_iou: true
+        train_stats_file: ".data/models/diffuscene/bedroom/dataset_stats.txt"
+
+    net_kwargs:
+        dim: 512
+        dim_mults: [1, 1, 1, 1]
+        channels: 62 
+        objectness_dim: 0
+        class_dim: 22
+        angle_dim: 2
+        objfeat_dim: 32
+        context_dim: 0
+        instanclass_dim: 128 
+        seperate_all: true  # separate all
+        #self_condition: true
+        # merge_bbox: true 
+        # modulate_time_context_instanclass: true
+
+feature_extractor:
+    name: "resnet18"
+    feature_size: 64
+    freeze_bn: true
+    input_channels: 1
+
+training:
+    splits: ["train", "val"]
+    epochs: 60000
+    steps_per_epoch: 500
+    batch_size: 128
+    save_frequency: 2000
+    max_grad_norm: 10
+    # optimizer
+    optimizer: Adam
+    weight_decay: 0.0
+    # schedule
+    schedule: 'step'
+    lr: 0.0002
+    lr_step: 10000
+    lr_decay: 0.5
+
+validation:
+    splits: ["test"]
+    frequency: 10
+    batch_size: 128
+    gen_traj: false
+    num_step: 100
+    gen_gt: false
+    gen_prob_map: false
+
+logger:
+    type: "wandb"
+    project: "diffuscene"
+ 
+clip_denoised: true

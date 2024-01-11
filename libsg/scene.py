@@ -1,13 +1,17 @@
 import copy
+from typing import Self
+
 from libsg.arch import Architecture
 from libsg.geo import Transform
 from libsg.scene_types import JSONDict
 
 
 class ModelInstance:
-    def __init__(self, model_id='', transform=Transform(), id='', parent_id=None):
+    """Main definition of a model/object and its associated transform, related objects, and metadata"""
+
+    def __init__(self, model_id="", transform=Transform(), id="", parent_id=None):
         self.id: str = id
-        self.type: str = 'ModelInstance'
+        self.type: str = "ModelInstance"
         self.model_id: str = model_id
         self.parent_id: str = parent_id
         self.transform: Transform = copy.deepcopy(transform)
@@ -15,36 +19,38 @@ class ModelInstance:
 
     def to_json(self, obj=None) -> JSONDict:
         obj = obj if obj else {}
-        obj['modelId'] = self.model_id
-        obj['id'] = self.id
+        obj["modelId"] = self.model_id
+        obj["id"] = self.id
         if self.parent_id is not None:
-            obj['parentId'] = self.parent_id
-        obj['transform'] = self.transform.to_json()
+            obj["parentId"] = self.parent_id
+        obj["transform"] = self.transform.to_json()
         return obj
 
     @classmethod
-    def from_json(cls, obj):
+    def from_json(cls, obj) -> Self:
         mi = ModelInstance()
-        mi.model_id = obj['modelId']
-        if 'id' in obj:
-            mi.id = obj['id']
+        mi.model_id = obj["modelId"]
+        if "id" in obj:
+            mi.id = obj["id"]
         else:
-            mi.id = str(obj['index'])
-        mi.parent_id = obj.get('parentId')
-        mi.transform = Transform.from_json(obj['transform'])
+            mi.id = str(obj["index"])
+        mi.parent_id = obj.get("parentId")
+        mi.transform = Transform.from_json(obj["transform"])
         return mi
 
 
 class Scene:
-    def __init__(self, id='', asset_source=None):
+    """Main scene definition"""
+
+    def __init__(self, id="", asset_source=None):
         self.id = id
         self.asset_source = asset_source
-        self.version = 'scene@1.0.2'
+        self.version = "scene@1.0.2"
         self.up = [0, 0, 1]
         self.front = [0, 1, 0]
         self.unit = 1
         self.arch = None
-        self.modelInstances_by_id: dict[str,ModelInstance] = {}
+        self.modelInstances_by_id: dict[str, ModelInstance] = {}
         self.modifications = []
         self.collisions = []
         self.__maxId = 0
@@ -55,7 +61,7 @@ class Scene:
 
     def __getNextId(self):
         self.__maxId = self.__maxId + 1
-        return f'{self.__maxId}'
+        return f"{self.__maxId}"
 
     def add(self, mi: ModelInstance, clone=False, parent_id=None) -> ModelInstance:
         if clone:
@@ -65,7 +71,7 @@ class Scene:
         else:
             modelInst = mi
         if modelInst.id in self.modelInstances_by_id:
-            raise Exception('Attempting to add model instance with duplicate id to scene') 
+            raise Exception("Attempting to add model instance with duplicate id to scene")
         self.modelInstances_by_id[modelInst.id] = modelInst
         if modelInst.id.isdigit():
             self.__maxId = max(int(modelInst.id), self.__maxId)
@@ -110,36 +116,36 @@ class Scene:
 
     def to_json(self, obj=None) -> JSONDict:
         obj = obj if obj else {}
-        obj['version'] = self.version
-        obj['id'] = self.id
-        obj['up'] = self.up
-        obj['front'] = self.front
-        obj['unit'] = self.unit
-        obj['assetSource'] = self.asset_source
-        obj['arch'] = self.arch.to_json()
-        obj['object'] = [mi.to_json() for mi in self.modelInstances]
-        obj['modifications'] = self.modifications
+        obj["version"] = self.version
+        obj["id"] = self.id
+        obj["up"] = self.up
+        obj["front"] = self.front
+        obj["unit"] = self.unit
+        obj["assetSource"] = self.asset_source
+        obj["arch"] = self.arch.to_json()
+        obj["object"] = [mi.to_json() for mi in self.modelInstances]
+        obj["modifications"] = self.modifications
 
         # add index (perhaps not needed in future)
-        id_to_index = { mi['id'] : i for i,mi in enumerate(obj['object'])}
-        for i,mi in enumerate(obj['object']):
-            mi['index'] = i
-            if mi.get('parentId') is not None:
-                mi['parentIndex'] = id_to_index[mi['id']] 
+        id_to_index = {mi["id"]: i for i, mi in enumerate(obj["object"])}
+        for i, mi in enumerate(obj["object"]):
+            mi["index"] = i
+            if mi.get("parentId") is not None:
+                mi["parentIndex"] = id_to_index[mi["id"]]
         return obj
 
     @classmethod
-    def from_json(cls, obj):
+    def from_json(cls, obj) -> Self:
         scn = Scene()
-        scn.id = obj['id']
-        scn.asset_source = obj['assetSource']
-        scn.up = list(obj['up'])
-        scn.front = list(obj['front'])
-        scn.unit = float(obj['unit'])
-        scn.arch = Architecture.from_json(obj['arch'])
+        scn.id = obj["id"]
+        scn.asset_source = obj["assetSource"]
+        scn.up = list(obj["up"])
+        scn.front = list(obj["front"])
+        scn.unit = float(obj["unit"])
+        scn.arch = Architecture.from_json(obj["arch"])
         scn.arch.ensure_typed()
-        scn.modifications = obj.get('modifications', [])
+        scn.modifications = obj.get("modifications", [])
         scn.modelInstances_by_id = {}
-        for o in obj['object']:
-            scn.add(ModelInstance.from_json(o)) 
+        for o in obj["object"]:
+            scn.add(ModelInstance.from_json(o))
         return scn

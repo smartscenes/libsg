@@ -1,21 +1,29 @@
 # libSG: A Flexible Library for Scene Generation
 
-## Local dev:
+libsg is a backend library for scene generation.
+
+## Data setup
+
+`libsg` was developed using the HSSD dataset. To setup your environment to use HSSD, follow the below steps:
+
+1. Createa base directory for data and set `base_dir` in [conf/config.yaml] to your base directory.
+
+2. Clone the [Floorplanner SceneBuilder (FPSB) repository](https://huggingface.co/datasets/3dlg-hcvc/fpsb) into `base_dir` to get the floorplanner scenes (this repo is currently private but will no longer be required soon.)
+
+3. Clone the [fphab repository](https://huggingface.co/datasets/fpss/fphab) into `base_dir` to get the GLB objects used during retrieval.
+
+## Local development
 
 Use `conda` to setup the enviroment needed for running the flask app.
-
-Set local dataset `base_dir` path in `conf/config.yaml`.
-Fetch stk/scenestate data and place under your `base_dir`.
 
 ```bash
 conda env create -f environment.yml
 conda activate sb
 ```
 
-## Local build:
-Install `libsg` locally via `pip` so that it is available for other modules to use.
+## Local build
 
-Note: first two commands may not be needed.
+If you want to use `libsg` with other modules, install `libsg` locally via `pip`:
 
 ```bash
 pip install --upgrade build
@@ -23,34 +31,33 @@ python -m build
 pip install -e .
 ```
 
-## Running Flask App and Usage Examples
+## Usage
 
-Start Flask App (by default runs server at `localhost:5000`):
+Start the server using the following command (by default, the server runs at `localhost:5000`):
 ```bash
-flask --app libsg.app --debug run
+./start_server.sh
 ```
+
+Use the `--background` option if you want the process to run detached from the shell.
+
+### API examples
 
 Retrieve a complete scene from the scene dataset:
 ```bash
 curl localhost:5000/scene/retrieve/
 ```
 
-Generate a new scene and write to `test.scene_instance.json` in Habitat format:
+Generate a new scene and write to `test.scene_instance.json` in STK format:
 ```bash
-curl localhost:5000/scene/generate -o test.scene_instance.json
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "<scene generation prompt>", "format": "STK"}' -o test.scene_instance.json
 ```
 
-Add an object matching specified category at specified position:
-```bash
-curl -X POST -H 'Content-Type:application/json' -d @object_add_category_position.json http://127.0.0.1:5000/object/add -o object_add_category_position_output.json
-```
+The current API supports simple prompts that must mention the type of room you are looking to generate 
+(e.g. `"bedroom"`, `"dining room"`, `"living room"`), and current supported scene formats include STK and HAB.
 
-Remove objects matching specified category from the scene:
-```bash
-curl -X POST -H 'Content-Type:application/json' -d @object_remove_category.json http://127.0.0.1:5000/object/remove -o object_remove_category_output.json
-```
 
-See libsg/api.py for examples of JSON payloads that can be used with above endpoints.
+See [libsg/app.py] for the public-facing API and JSON payloads that can be used with above endpoints and [libsg/api.py] 
+for the internal API, which exposes methods for easy use in downstream code.
 
 ## Packaging
 
