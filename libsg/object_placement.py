@@ -34,8 +34,9 @@ class Placement:
 class ObjectPlacer:
     """Place objects in scene with collision avoidance."""
 
-    def __init__(self, model_db: AssetDb):
+    def __init__(self, model_db: AssetDb, size_threshold=0.5):
         self.__model_db = model_db
+        self.size_threshold = size_threshold
 
     def _resolve_placement_spec(
         self, placement_spec: PlacementSpec, scene: Scene, object_to_place: ModelInstance
@@ -204,10 +205,13 @@ class ObjectPlacer:
             if "dimensions" in object_spec:
                 dim_sorted_models = self.__model_db.sort_by_dim(model_ids, object_spec.dimensions)
                 total = sum(object_spec.dimensions) ** 2
-                trunc_sorted = [m for m in dim_sorted_models if m["dim_se"] < 0.5 * total]
+                trunc_sorted = [m for m in dim_sorted_models if m["dim_se"] < self.size_threshold * total]
                 if len(trunc_sorted) > 0:
                     model_id = random.choice(trunc_sorted)["fullId"]
                 else:
+                    print()
+                    print("-----NONE FOUND-----")
+                    print()
                     model_id = dim_sorted_models[0]["fullId"]
             else:
                 model_id = random.choice(model_ids)

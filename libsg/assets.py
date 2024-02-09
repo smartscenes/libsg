@@ -1,12 +1,17 @@
-from libsg.scene_types import JSONDict
-
 import csv
 import glob
-import numpy as np
 import os
-import pysolr
+import random
 import sys
+from typing import Optional
+
+import numpy as np
+import pandas as pd
+import pysolr
+import requests
 from easydict import EasyDict
+
+from libsg.scene_types import JSONDict
 
 
 class AssetGroup:
@@ -53,9 +58,16 @@ class AssetGroup:
 class AssetDb:
     def __init__(self, name, cfg, solr_url=None):
         self.name = name
+        metadata_path = cfg.get("metadata")
         path = cfg.get("path")
         self.assets = {}
-        if path:
+        if metadata_path:
+            metadata = pd.read_csv(metadata_path)
+            scene_ids = metadata["sceneId"]  # FIXME: this is not generalizable
+
+            for s_id in scene_ids:
+                self.assets[s_id] = path.format(scene_id=s_id)
+        elif path:
             if not os.path.isdir(path):
                 # TODO: use logger
                 print(f"Warning: invalid path for assets {self.name}: {path}", file=sys.stderr)
@@ -70,8 +82,11 @@ class AssetDb:
         # print(self.assets)
         self.__solr = pysolr.Solr(solr_url) if solr_url else None
 
-    def get(self, id: str):
-        return self.assets.get(id)
+    def get(self, id: Optional[str] = None):
+        if id is not None:
+            return self.assets.get(id)
+        else:
+            return random.choice(list(self.assets.values()))
 
     def search(self, *args, **kwargs):
         return self.__solr.search(*args, **kwargs)
@@ -140,6 +155,9 @@ class AssetDb:
     def sort_by_dim(self, ids: list[str], dims: list[float]):
         metadata = self.get_metadata_for_ids(ids)
         for m in metadata:
-            m["dim_se"] = np.sum((np.asarray(dims) - np.asarray(m["dims"])) ** 2)
+            if m["dims"] is None:
+                m["dim_se"] = 0.0  # FIXME: some objects don't have a provided raw dimension
+            else:
+                m["dim_se"] = np.sum((np.asarray(dims) - np.asarray(m["dims"])) ** 2)
         metadata = sorted(metadata, key=lambda m: m["dim_se"])
         return metadata

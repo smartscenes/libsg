@@ -131,3 +131,9 @@ dmypy.json
 .vscode/
 _skbuild/
 MANIFEST.in
+
+.data
+*.pkl
+*.obj
+*.png
+scenestate*.json

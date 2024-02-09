@@ -64,7 +64,7 @@ def build_network(
 
         # models were trained with network. prefix
         state_dict = {k.removeprefix("network."): v for k, v in state_dict.items()}
-        network.load_state_dict(state_dict)
+        network.load_state_dict(state_dict, strict=False)
     network.to(device)
     # return network, train_on_batch, validate_on_batch
     return network

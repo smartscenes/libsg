@@ -1,16 +1,55 @@
 # libSG: A Flexible Library for Scene Generation
 
-libsg is a backend library for scene generation.
+`libsg` is a backend library for scene generation, intended to be used with the scene toolkit frontend.
+
+## Package Contents
+
+The folder structure breaks down as follows (grouped in accordance with function):
+```
+conf  # configuration files for libsg and models
+├── layout_generator  # layout generation model configurations
+│   ├── layout_mapping.yaml  # defines general layout parameters and mapping from model and room type to configuration
+├── config.yaml  # general libsg config
+libsg  # main code
+│   ├── api.py  # main internal API for handling requests within libsg. Interfaces use parsed spec classes.
+│   ├── app.py  # main external API for handling requests from stk or other sources. Interfaces expect JSON input and 
+                  apply minimal processing to convert into a form that the internal APIs can use.
+│   ├── scene_builder.py  # main class for generating or manipulating scenes, which calls all downstream modules
+│   ├── scene_parser.py  # main interface class for handling parsing of scene description
+│   ├── arch_builder.py  # code for retrieving or generating architecture of scene
+│   ├── object_placement.py  # main class for handling selection and placement of objects
+│   ├── io.py  # main class for defining export to scene formats
+│   ├── arch.py  # main class defining internal data representation for architectures
+│   ├── scene.py  # main class defining internal data representation for scenes
+│   ├── scene_types.py  # an array of helper classes to define object types and specification classes
+│   ├── model  # model code for text parsing, layout generation, shape generation, etc.
+│   │   ├── diffuscene  # model code for diffuscene
+│   │   ├── atiss.py  # model code for ATISS
+│   │   ├── layout.py  # main interface code for calling layout models, incl. pre- and post-processing of outputs
+│   │   ├── utils.py  # utility functions for models
+│   ├── assets.py  # database class for managing and retrieving assets
+│   ├── simscene.py  # class for handling simulation of a scene, e.g. for object placement collision detection
+│   ├── simulator.py  # class for base method simulation code
+│   ├── config.py  # code to load main configuration
+│   ├── geo.py  # auxiliary code to handle object transforms
+```
 
 ## Data setup
 
 `libsg` was developed using the HSSD dataset. To setup your environment to use HSSD, follow the below steps:
 
-1. Createa base directory for data and set `base_dir` in [conf/config.yaml] to your base directory.
+1. Create a base directory for data and set `base_dir` in [conf/config.yaml] to your base directory.
 
-2. Clone the [Floorplanner SceneBuilder (FPSB) repository](https://huggingface.co/datasets/3dlg-hcvc/fpsb) into `base_dir` to get the floorplanner scenes (this repo is currently private but will no longer be required soon.)
+2. Clone the [Floorplanner SceneBuilder (FPSB) repository](https://huggingface.co/datasets/3dlg-hcvc/fpsb) into 
+`base_dir` to get the floorplanner scenes (Please contact the authors concerning access.)
 
-3. Clone the [fphab repository](https://huggingface.co/datasets/fpss/fphab) into `base_dir` to get the GLB objects used during retrieval.
+3. Clone the [fphab repository](https://huggingface.co/datasets/fpss/fphab) into `base_dir` to get the GLB objects used 
+during retrieval.
+
+4. To use the structured3d dataset of room architectures, you must link the [configuration](conf/config.yaml) to the 
+structured3d.rooms.csv file, which can be retrieved at present 
+[here](https://github.com/3dlg-hcvc/scene-toolkit/blob/master/server/static/data/structured3d/structured3d.rooms.csv). 
+Please contact the authors concerning access. Modify the `arch_db` parameters to link to the CSV for scene lookup.
 
 ## Local development
 
@@ -21,9 +60,7 @@ conda env create -f environment.yml
 conda activate sb
 ```
 
-## Local build
-
-If you want to use `libsg` with other modules, install `libsg` locally via `pip`:
+Alternatively, if you want to use `libsg` with other modules, install `libsg` locally via `pip`:
 
 ```bash
 pip install --upgrade build
@@ -52,9 +89,24 @@ Generate a new scene and write to `test.scene_instance.json` in STK format:
 curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "<scene generation prompt>", "format": "STK"}' -o test.scene_instance.json
 ```
 
-The current API supports simple prompts that must mention the type of room you are looking to generate 
-(e.g. `"bedroom"`, `"dining room"`, `"living room"`), and current supported scene formats include STK and HAB.
+The current API, by default, supports simple prompts that must mention the type of room you are looking to generate 
+(e.g. `"bedroom"`, `"dining room"`, `"living room"`). For instance, to generate a bedroom, run
+```bash
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK"}' -o test.scene_instance.json
+```
 
+Current supported scene formats include STK and HAB.
+
+You can additionally pass configuration options to the API to customize the backend generation of the scene:
+* `sceneInference.layoutModel` - specifies the model to use for layout generation (`ATISS` or `DiffuScene`)
+* `sceneInference.passTextToLayout` - if True, the code will attempt to pass the raw text input to the model. Currently
+  only applicable to DiffuScene.
+
+For instance, to specify in the request that you would like to generate scenes using DiffuScene with the raw text input, 
+run
+```bash
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a dining room with a table and four chairs around it.", "format": "STK", "config": {"sceneInference.layoutModel": "DiffuScene", "sceneInference.passTextToLayout": "True"}}' -o test.scene_instance.json
+```
 
 See [libsg/app.py] for the public-facing API and JSON payloads that can be used with above endpoints and [libsg/api.py] 
 for the internal API, which exposes methods for easy use in downstream code.

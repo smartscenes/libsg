@@ -2,7 +2,7 @@ import os
 import sys
 from typing import Optional
 
-from omegaconf import DictConfig
+from omegaconf import DictConfig, open_dict
 from hydra import compose
 
 
@@ -13,7 +13,7 @@ __all__ = ["ATISS", "DiffuScene", "build_model"]
 
 
 def build_model(
-    layout_spec: SceneLayoutSpec, model_name: str, config: DictConfig, bounds: Optional[dict] = None
+    layout_spec: SceneLayoutSpec, model_name: str, config: DictConfig, bounds: Optional[dict] = None, text_condition: bool = False,
 ) -> LayoutBase:
     """Build instantiation of model given specification.
 
@@ -34,4 +34,8 @@ def build_model(
 
         if bounds is not None:
             model_config.layout_generator.data.bounds.update(bounds)
+        with open_dict(model_config):
+            model_config.layout_generator.network.room_mask_condition = not text_condition and model_config.layout_generator.network.room_mask_condition
+            model_config.layout_generator.network.text_condition = text_condition
+
         return getattr(this, model_name)(model_config.layout_generator)

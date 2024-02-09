@@ -131,8 +131,9 @@ def scene_retrieve(id) -> SceneState:
     :return: scene state corresponding to ID
     """
     format_ = request.json.get("format", "STK")
+    config = request.json.get("config", {})
     scene_spec = SceneSpec(type="id", input=id, format=format_)
-    return scene_retrieve_api(scene_spec)
+    return scene_retrieve_api(scene_spec, **config)
 
 
 @app.route("/scene/generate", methods=["GET", "POST"])
@@ -172,8 +173,9 @@ def generate_scene():
     type_ = request.json["type"]
     input_ = request.json.get("input", "bedroom")
     format_ = request.json.get("format", "STK")
+    config = request.json.get("config", {})
     scene_spec = SceneSpec(type=SceneType(type_), input=input_, format=format_)
-    return scene_generate_api(scene_spec)
+    return scene_generate_api(scene_spec, **config)
 
 
 @app.route("/object/add", methods=["POST"])
