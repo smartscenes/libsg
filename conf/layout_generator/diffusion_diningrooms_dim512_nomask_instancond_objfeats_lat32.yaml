@@ -1,7 +1,7 @@
 weight_file: .data/models/diffuscene/diningroom/last.ckpt
 
 data:
-    bounds: {sizes: [[0.032552000000000025, 0.020000020334800084, 0.009999999999999884], [2.3802699999999994, 1.7700649999999998, 1.4137885]], translations: [[-5.089109999999999, 0.0375, -5.716401580065309], [5.09667921844729, 3.384158412231445, 5.4048500000000015]], angles: [-3.14159265, 3.14159265], objfeats: [0.9661873579025269, -4.703158855438232, 5.375071048736572]}
+    bounds: {sizes: [[0.032552000000000025, 0.020000020334800084, 0.009999999999999884], [2.3802699999999994, 1.7700649999999998, 1.4137885]], translations: [[-5.089109999999999, 0.0375, -5.716401580065309], [5.09667921844729, 3.384158412231445, 5.4048500000000015]], angles: [-3.14159265, 3.14159265], objfeats_32: [0.9661873579025269, -4.703158855438232, 5.375071048736572]}
     dataset_type: "cached_threedfront"
     encoding_type: "cached_diffusion_cosin_angle_objfeatsnorm_lat32_wocm" #"cached_diffusion_wocm_no_prm"
     dataset_directory: "/cluster/balrog/jtang/3d_front_processed/diningrooms_objfeats_32_64"
@@ -12,10 +12,11 @@ data:
     filter_fn: "threed_front_diningroom" # "no_filtering"
     train_stats: "dataset_stats.txt"
     room_layout_size: "64,64"
+    room_dims: [6.2, 6.2]  # in meters; [x_max - x_min, y_max - y_min]
     max_length: 21
     classes: [armchair.n.01, bookcase.n.01, cabinet.n.01, ceiling_lamp.n.01, chaise_longue.n.01, chair.n.01, coffee_table.n.01, console_table.n.01, table.n.02, desk.n.01, chair.n.01, dining_table.n.01, l-shaped_couch.n.01, sofa.n.01, chair.n.01, chair.n.01, sofa.n.01, pendant_lamp.n.01, end_table.n.01, shelf.n.01, stool.n.01, tv_stand.n.01, wardrobe.n.01, wine_rack.n.01, start, end] 
     up_axis: "y"
-export_room_mask: false
+export_room_mask: true
 
 network:
     type: "diffusion_scene_layout_ddpm"

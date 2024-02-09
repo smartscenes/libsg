@@ -16,6 +16,7 @@ from typing import Any, Optional, Self, Sequence
 import numpy as np
 import torch
 from PIL import Image
+from scipy.spatial.transform import Rotation
 from shapely import Polygon
 from shapely.geometry import MultiPoint
 
@@ -92,6 +93,48 @@ class Point:
         """Return Point from list of coordinates"""
         return cls(*[p for p in l])
 
+    def swap_axes(self, axis_1: int, axis_2: int) -> Self:
+        """Return a new point with two axes swapped.
+
+        Example:
+        >>> point = Point3D(1, 2, 3)
+        >>> point.swap_axes(0, 1) == Point3D(2, 1, 3)
+
+        :param axis_1: index of first axis to swap
+        :param axis_2: index of second axis to swap
+        :return: new point with axes swapped.
+        """
+        if axis_1 == axis_2:
+            return self
+
+        point = self.tolist()
+        transform_matrix = np.eye(len(point))
+        row_1 = np.copy(transform_matrix[axis_1])
+        row_2 = np.copy(transform_matrix[axis_2])
+        transform_matrix[axis_1, :] = row_2
+        transform_matrix[axis_2, :] = row_1
+
+        new_point = transform_matrix @ np.array(point)
+
+        return self.__class__.fromlist(new_point)
+
+    def invert(self, axis: int) -> Self:
+        """Returns new point with specified axis inverted (negated).
+
+        Example:
+        >>> point = Point3D(1, 2, 3)
+        >>> point.invert(0) == Point3D(-1, 2, 3)
+
+        :param axis: index of axis to invert
+        :return: new point with axis inverted
+        """
+        point = self.tolist()
+        point[axis] = -point[axis]
+        return self.__class__.fromlist(point)
+
+    def __eq__(self, other: Self) -> bool:
+        return self.tolist() == other.tolist()
+
 
 class Point2D(Point):
     """2D point class."""
@@ -156,6 +199,19 @@ class Point3D(Point):
         length = self.length()
         self.scale(1 / length)
         return self
+
+    def rotate(self, axis: int, angle: float) -> Self:
+        """Rotate a point about an axis index by a given angle (in radians)."""
+        point = self.tolist()
+        rotvec = np.zeros((3,), dtype=float)
+        rotvec[axis] = angle
+        new_point = Rotation.from_rotvec(rotvec).as_matrix() @ np.array(point)
+        return self.__class__.fromlist(new_point)
+    
+    def translate(self, vec: np.array) -> Self:
+        point = np.array(self.tolist())
+        transformed = point + vec
+        return self.__class__.fromlist(transformed)
 
 
 class BBox2D:
@@ -362,7 +418,8 @@ class Wall(ArchElement):
         """Get width of wall"""
         d0 = self.points[0][0] - self.points[1][0]
         d1 = self.points[0][1] - self.points[1][1]
-        return math.sqrt(d0 * d0 + d1 * d1)
+        d2 = self.points[0][2] - self.points[1][2]
+        return math.sqrt(d0 * d0 + d1 * d1 + d2 * d2)
 
     @property
     def up(self) -> Point3D:
@@ -434,23 +491,36 @@ class Wall(ArchElement):
         bbox.max.z += self.height
         return bbox
 
+    def translate(self, vec: np.array) -> Self:
+        self.points = [pts.translate(vec) for pts in self.points]
+        return self
+
     def to_json(self) -> JSONDict:
         """Get JSON form of Wall object"""
         return {
             "id": self.id,
             "type": self.type,
             "roomId": self.room_id,
-            "points": self.points,
+            "points": [pt.tolist() for pt in self.points],
             "height": self.height,
             "depth": self.depth,
             "materials": self.sides,
         }
 
+    @classmethod
     def from_json(cls, obj) -> Self:
         """Get Wall object from JSON specification"""
         assert obj["type"] == "Wall"
-        wall = Wall(obj["id"], obj["points"], obj["height"], obj.get("depth"), obj.get("materials"), obj.get("roomId"))
+        wall = Wall(
+            obj["id"],
+            [Point3D(*p) for p in obj["points"]],
+            obj["height"],
+            obj.get("depth"),
+            obj.get("materials"),
+            obj["roomId"],
+        )
         return wall
+    
 
 
 class ArchHorizontalPlane(ArchElement):
@@ -460,7 +530,7 @@ class ArchHorizontalPlane(ArchElement):
         super().__init__(id, type)
         self.points: list[Point3D] = points
         self.depth: float = depth
-        self.sides: list = sides  # material for each wall side
+        self.sides: list = sides  # material
         self.room_id: str = room_id
 
     @property
@@ -474,13 +544,17 @@ class ArchHorizontalPlane(ArchElement):
             bbox.max.z += 0.05  # default depth TODO: push to some constants
         return bbox
 
+    def translate(self, vec: np.array) -> Self:
+        self.points = [pts.translate(vec) for pts in self.points]
+        return self
+
     def to_json(self) -> JSONDict:
         """Convert object to JSON format"""
         return {
             "id": self.id,
             "type": self.type,
             "roomId": self.room_id,
-            "points": self.points,
+            "points": [pt.tolist() for pt in self.points],
             "depth": self.depth,
             "materials": self.sides,
         }
@@ -492,10 +566,13 @@ class Floor(ArchHorizontalPlane):
     def __init__(self, id, points, height, sides, room_id):
         super().__init__(id, "Floor", points, height, sides, room_id)
 
+    @classmethod
     def from_json(cls, obj) -> Self:
         """Get Floor object from JSON"""
         assert obj["type"] == "Floor"
-        element = Floor(obj["id"], obj["points"], obj.get("depth"), obj.get("materials"), obj.get("roomId"))
+        element = Floor(
+            obj["id"], [Point3D(*p) for p in obj["points"]], obj.get("depth"), obj.get("materials"), obj.get("roomId")
+        )
         return element
 
 
@@ -505,10 +582,13 @@ class Ceiling(ArchHorizontalPlane):
     def __init__(self, id, points, height, sides, room_id):
         super().__init__(id, "Ceiling", points, height, sides, room_id)
 
-    def from_json(cls, obj):
+    @classmethod
+    def from_json(cls, obj) -> Self:
         """Get Ceiling object from JSON"""
         assert obj["type"] == "Ceiling"
-        element = Ceiling(obj["id"], obj["points"], obj.get("depth"), obj.get("materials"), obj.get("roomId"))
+        element = Ceiling(
+            obj["id"], [Point3D(*p) for p in obj["points"]], obj.get("depth"), obj.get("materials"), obj.get("roomId")
+        )
         return element
 
 
@@ -554,75 +634,20 @@ class Room(ArchElement):
         self.floor = None
         self.ceiling = None
 
+    def to_json(self) -> JSONDict:
+        """Convert object to JSON format"""
+        return {
+            "id": self.id,
+            "type": "Other",  # not sure why existing STKs are like this
+            "walls": self.wall_sides,
+        }
 
-@dataclass
-class Arch:
-    """Class for architecture of scene, including walls, floors, ceilings, and related elements."""
-
-    elements: list[ArchElement] = field(
-        default_factory=list
-    )  # flat list of architecture elements (floor, ceiling, wall, and other stuff)
-    rooms: list[Room] = field(default_factory=list)  # list of rooms
-    openings: list[Opening] = field(
-        default_factory=list
-    )  # flat list opening (windows, doors, and relevant information)
-
-    def get_room_mask(self, room_dim: int = 64, floor_perc: float = 0.8) -> torch.Tensor:
-        """Get binary room mask for architecture.
-
-        :param room_dim: size of room mask, defaults to 64
-        :param floor_perc: percent of room mask size to correspond to active room area, defaults to 0.8
-        :return: tensor mask representing open space in room
-        """
-
-        def map_to_mask(pts: np.ndarray, min_bound: float, max_bound: float, room_dim: int, pad: int):
-            pts_norm = (pts - min_bound) / (max_bound - min_bound)  # norm to [0, 1]
-            return np.round(pts_norm * (room_dim - 2 * pad - 1) + pad).astype(int)
-
-        pad = int(round((1 - floor_perc) * room_dim))
-        room_mask = torch.zeros(size=(1, 1, 64, 64), dtype=torch.float32)
-
-        # --- compute floor size ---
-        # collect points for each floor
-        rooms = []
-        for room in self.rooms:
-            if room.floor is not None:
-                rooms.append(np.array([[p.x, p.y] for p in room.floor.points]))
-        all_pts = np.concatenate(rooms, axis=0)
-
-        # get bounds and scale points to [pad, room_dim - pad] range
-        min_bound = np.min(all_pts, axis=0, keepdims=True)
-        max_bound = np.max(all_pts, axis=0, keepdims=True)
-
-        # iterate through rooms and white-list floors
-        for room in rooms:
-            room_rescaled = map_to_mask(room, min_bound, max_bound, room_dim, pad)
-
-            # apply room to mask
-            room_poly = Polygon(room_rescaled)
-            lattice = MultiPoint(list(product(np.arange(pad, room_dim - pad - 1), np.arange(pad, room_dim - pad - 1))))
-            intersection = lattice.intersection(room_poly)
-            x_coords = []
-            y_coords = []
-            for pt in intersection.geoms:
-                x_coords.append(int(pt.x))
-                y_coords.append(int(pt.y))
-            room_mask[0, 0, np.array(y_coords), np.array(x_coords)] = 1.0
-
-        # re-mask out walls
-        for elem in self.elements:
-            if elem.type == "Wall":
-                wall_bbox = elem.bbox3D
-                wall_bounds = np.array([[wall_bbox.min.x, wall_bbox.min.y], [wall_bbox.max.x, wall_bbox.max.y]])
-                wall_bounds_rescaled = map_to_mask(wall_bounds, min_bound, max_bound, room_dim, pad)
-                room_mask[
-                    0,
-                    0,
-                    wall_bounds_rescaled[0, 1] : wall_bounds_rescaled[1, 1] + 1,
-                    wall_bounds_rescaled[0, 0] : wall_bounds_rescaled[1, 0] + 1,
-                ] = 0.0
-
-        return room_mask
+    @classmethod
+    def from_json(cls, obj) -> Self:
+        """Get Room object from JSON"""
+        room = Room(id=obj["id"])
+        room.wall_sides = obj.get("wallIds", [])
+        return room
 
 
 class ObjectInstance:
@@ -650,8 +675,10 @@ class SceneState:
     """Specification of scene state"""
 
     def __init__(self):
+        from libsg.arch import Architecture  # FIXME: needed to avoid circular import :(
+
         self.format: str
-        self.arch: Arch  # some architecture (actually inside scene)
+        self.arch: Architecture  # some architecture (actually inside scene)
         self.objects: list[ObjectInstance]  # objects in this scene with their transforms (actually inside scene)
         self.selected: list[str]  # ids of elements/objects most recently changed
         self.modifications: list[Modification]
@@ -664,15 +691,6 @@ class SceneContext:
         self.mask: BBox3D  # box that defines mask of context
 
 
-class SceneSpec:
-    """Specification of scene description"""
-
-    def __init__(self, type, input, format):
-        self.type = type  # type is id, category, or text description
-        self.input = input
-        self.format = format
-
-
 class SceneType(Enum):
     """Enum for scene specification types"""
 
@@ -682,12 +700,25 @@ class SceneType(Enum):
 
 
 @dataclass
-class SceneLayoutSpec:
-    """Specification of scene layout"""
+class SceneSpec:
+    """Specification of scene description"""
 
     type: SceneType
     input: str
-    arch: Optional[Arch] = None
+    format: str  # HAB, STK
+    raw: Optional[str] = None
+
+
+@dataclass
+class SceneLayoutSpec:
+    """Specification of scene layout"""
+
+    from libsg.arch import Architecture  # FIXME: needed to avoid circular import :(
+
+    type: SceneType
+    input: str
+    arch: Optional[Architecture] = None
+    raw: Optional[str] = None
 
 
 @dataclass
@@ -706,8 +737,10 @@ class ObjectTemplateInstance:
 class SceneLayout:
     """Scene layout definition"""
 
+    from libsg.arch import Architecture  # FIXME: needed to avoid circular import :(
+
     objects: list[ObjectTemplateInstance]
-    arch: Optional[Arch] = None
+    arch: Optional[Architecture] = None
 
     NEAR_FLOOR_HEIGHT = 0.05
     BOX_MESH_VERTICES = [
@@ -742,11 +775,11 @@ class SceneLayout:
                 continue  # skip ceiling lamps  # TODO: ceiling lamp placement logic
             origin = np.array(obj.dimensions) / 2
             origin[2] = 0.0  # put center at bottom of object for now
-            box_verts = list(product(*[[0, d] for d in obj.dimensions]))
+            box_verts = list(product(*[[0, obj.dimensions[i]] for i in (0, 2, 1)]))  # flip y-axis to vertical
             box_verts = np.array(box_verts) - origin  # 8 x 3
 
             # rotate by angle
-            box_verts_rotated = GeoTransform.get_rotated_vector([0, 0, obj.orientation - math.pi / 2], box_verts)
+            box_verts_rotated = GeoTransform.get_rotated_vector([0, 0, obj.orientation], box_verts)
 
             # shift to object location
             obj_position = np.array(obj.position)

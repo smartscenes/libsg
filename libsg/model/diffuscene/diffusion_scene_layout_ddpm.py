@@ -13,7 +13,7 @@ import clip
 
 class DiffusionSceneLayout_DDPM(Module):
 
-    def __init__(self, n_classes, feature_extractor, config):
+    def __init__(self, n_classes: int, feature_extractor, config):
         super().__init__()
 
         # TODO: Add the projection dimensions for the room features in the
@@ -89,9 +89,10 @@ class DiffusionSceneLayout_DDPM(Module):
         
         if self.learnable_embedding:
             if self.instance_condition:
+                device = "cuda" if torch.cuda.is_available() else "cpu"
                 self.register_parameter(
                     "positional_embedding",
-                    nn.Parameter(torch.randn(self.sample_num_points, self.instance_emb_dim))
+                    nn.Parameter(torch.randn(self.sample_num_points, self.instance_emb_dim, device=device))
                 )
             else:
                 self.instance_emb_dim = 0

@@ -40,7 +40,7 @@ class SceneExporter:
         obj["stage_instance"] = {"template_name": f"stages/{scene.id}"}
         obj["translation_origin"] = "asset_local"
         object_instances = []
-        for mi in scene.modelInstances:
+        for mi in scene.model_instances:
             o_obj = {}
             raw_id = mi.model_id.split(".")[1]
             o_obj["template_name"] = raw_id

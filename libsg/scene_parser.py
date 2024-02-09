@@ -25,11 +25,11 @@ class SceneParser:
         """
         if scene_spec.type == SceneType.text:
             if "living room" in scene_spec.input:
-                return SceneSpec(type=SceneType.category, input="living_room", format=scene_spec.format)
+                return SceneSpec(type=SceneType.category, input="living_room", format=scene_spec.format, raw=scene_spec.input)
             elif "dining room" in scene_spec.input:
-                return SceneSpec(type=SceneType.category, input="dining_room", format=scene_spec.format)
+                return SceneSpec(type=SceneType.category, input="dining_room", format=scene_spec.format, raw=scene_spec.input)
             elif "bedroom" in scene_spec.input:
-                return SceneSpec(type=SceneType.category, input="bedroom", format=scene_spec.format)
+                return SceneSpec(type=SceneType.category, input="bedroom", format=scene_spec.format, raw=scene_spec.input)
             else:
                 raise ValueError(f"Cannot parse room type from scene specification: {scene_spec.input}")
         else:

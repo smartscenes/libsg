@@ -14,6 +14,8 @@ from torchvision import models
 from torch.nn import functional as F
 from torch.nn.parameter import Parameter
 
+from .utils import descale
+
 
 def cross_entropy_loss(pred, target):
     """Cross entropy loss."""
@@ -1047,14 +1049,6 @@ def atiss_network(config):
 
 
 # dataset-related
-
-
-def descale(x, minimum, maximum):
-    x = (x + 1) / 2
-    x = x * (maximum - minimum) + minimum
-    return x
-
-
 def descale_bbox_params(bounds, s):
     sample_params = {}
     for k, v in s.items():

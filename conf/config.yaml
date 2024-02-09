@@ -1,14 +1,18 @@
 base_dir: "/datasets/internal/hssd"
+base_url: "https://aspis.cmpt.sfu.ca"
+rlsd_basepath: "projects/rlsd/data/structured3d-fp2cg"
 
 scene_builder:
   arch_db:
-    path: null
+    metadata: .data/datasets/structured3d/structured3d.rooms.csv
+    path: "${base_url}/${rlsd_basepath}/arch/{scene_id}.arch.json"
   scene_db:
     path: "${base_dir}/fpsb/scenes/cluttered/scenestate"
   model_db:
     source: "fpModel"
     mesh_dir: "${base_dir}/fphab/objects"
     collision_mesh_dir: "${base_dir}/fphab/objects"
+    size_threshold: 0.25
     defaults:
       up: [0, 1, 0]
       front: [0, 0, 1]

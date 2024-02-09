@@ -15,27 +15,21 @@ from typing import Any, Optional
 
 import numpy as np
 
+from libsg.arch_builder import ArchBuilder
+from libsg.arch import Architecture
 from libsg.assets import AssetDb
 from libsg.object_placement import ObjectPlacer
 from libsg.scene_types import (
-    Arch,
     BBox3D,
-    Ceiling,
-    Door,
-    Floor,
     JSONDict,
     SceneState,
     ObjectSpec,
     ObjectTemplateInstance,
-    Opening,
     Point3D,
-    Room,
     SceneSpec,
     SceneLayoutSpec,
     SceneLayout,
     PlacementSpec,
-    Wall,
-    Window,
 )
 from libsg.scene import Scene
 from libsg.simscene import SimScene
@@ -73,151 +67,63 @@ class SceneBuilder:
 
     NEAR_FLOOR_HEIGHT = 0.05
 
-    def __init__(self, cfg: DictConfig, layout: DictConfig):
+    def __init__(self, cfg: DictConfig, layout: DictConfig, **kwargs):
         """
         :param cfg: loaded config at conf/config.yaml:scene_builder
         :param layout: loaded config at conf/config.yaml:scene_builder.layout
         """
         self.layout_cfg = layout
         self.__base_solr_url = cfg.get("solr_url")
-        self.__arch_db = AssetDb("arch", cfg.get("arch_db"))
+        self.__arch_builder = ArchBuilder(cfg.get("arch_db"))
         self.__scene_db = AssetDb("scene", cfg.get("scene_db"))
         self.__model_db = AssetDb("model", cfg.get("model_db"), solr_url=f"{self.__base_solr_url}/models3d")
         self.scene_exporter = SceneExporter()
-        self.object_placer = ObjectPlacer(model_db=self.__model_db)
+        self.object_placer = ObjectPlacer(model_db=self.__model_db, size_threshold=cfg.model_db.get("size_threshold", 0.5))
+        self.asset_source = cfg.model_db.source
 
-    def generate_arch(self, scene_spec: SceneSpec) -> tuple[Arch, JSONDict, BBox3D]:
+        self.infer_missing_objects = kwargs.get("sceneInference.inferMissingObjects", False)
+        self.layout_model = kwargs.get("sceneInference.layoutModel", self.layout_cfg.default_model)
+        print("passTextToLayout", type(kwargs.get("sceneInference.passTextToLayout")))
+        pass_text = kwargs.get("sceneInference.passTextToLayout", "False").lower()
+        if pass_text not in {"true", "false"}:
+            raise ValueError(f"Invalid value for sceneInference.passTextToLayout: {pass_text}")
+        self.pass_text = (
+            pass_text == "true"
+            and self.layout_cfg.config[self.layout_model].can_condition_on_text
+        )
+
+    def generate_arch(self, scene_spec: SceneSpec) -> tuple[Architecture, JSONDict, BBox3D]:
         """Generate architecture for scene.
 
-        The current implementation retrieves an architecture from an existing HSSD scene and removes all objects,
-        preserving only walls (and associated openings) and the floor shape.
+        The current implementation retrieves an architecture from Structured3D.
 
         :param scene_spec: specification of scene. As of current, assumes that scene spec specifies a pre-existing
-        HSSD scene ID to load as the base scene, though all objects are removed from the architecture.
-        :raises ValueError: unsupported element or hole type
-        :return: tuple of architecture object, scene object (without objects), and axis-aligned bounding box around
+        structured3d ID to load as the base scene, without pre-existing objects.
+        :return: tuple of architecture object, scene JSON (without objects), and axis-aligned bounding box around
         scene, as calculated by the min/max AABB of all elements in the scene.
         """
-        # TODO: move this code to arch_builder.py
         # load base scene and clear default layout objects
-        base_scene_path = self.__scene_db.get(scene_spec.input)
-        base_scene = json.load(open(base_scene_path, "r"))["scene"]
-        base_scene["object"] = []  # keep arch, drop existing objects
+        arch = self.__arch_builder.retrieve(scene_spec.input, min_size=self.layout_cfg.min_room_size)  # FIXME: this should be parametrized somehow based on the room type
+        base_scene = Scene.from_arch(arch, asset_source=self.asset_source)
 
         # compute base scene AABB to transform object positions later
         with Simulator(mode="direct", verbose=False, use_y_up=False) as sim:
-            sim_scene = SimScene(sim, Scene.from_json(base_scene), self.__model_db.config, include_ground=True)
+            sim_scene = SimScene(sim, base_scene, self.__model_db.config, include_ground=True)
             base_scene_aabb = sim_scene.aabb
 
-        # create architecture
-        scene_arch = base_scene["arch"]
-        elements = []
-        rooms: dict[str, Room] = {}  # room_id -> Room
-        openings: list[Opening] = []
-        for elem_raw in scene_arch["elements"]:
-            room_id = elem_raw["roomId"]
+        return arch, base_scene.to_json(), base_scene_aabb
 
-            if room_id not in rooms:
-                rooms[room_id] = Room(room_id)
-
-            # TODO: use from_json() for these instead of constructing from scratch
-            if elem_raw["type"] == "Wall":
-                elem = Wall(
-                    elem_raw["id"],
-                    elem_raw["points"],
-                    elem_raw["height"],
-                    elem_raw["depth"],
-                    elem_raw["materials"],
-                    room_id,
-                )
-                rooms[room_id].wall_sides.append(elem)
-
-                for hole in elem_raw.get("holes", []):
-                    opening_min = hole["box"]["min"]
-                    opening_max = hole["box"]["max"]
-                    width = opening_max[0] - opening_min[0]
-                    mid = (opening_min[0] + (width / 2)) / elem.width
-                    height = opening_max[1] - opening_min[1]
-                    elevation = opening_min[1] + height / 2
-                    if hole["type"] == "window":
-                        openings.append(
-                            Window(
-                                id=hole["id"],
-                                parent=elem,
-                                mid=mid,
-                                height=height,
-                                width=width,
-                                elevation=elevation,
-                            )
-                        )
-                    elif hole["type"] == "door":
-                        openings.append(
-                            Door(
-                                id=hole["id"],
-                                parent=elem,
-                                mid=mid,
-                                height=height,
-                                width=width,
-                                elevation=elevation,
-                            )
-                        )
-                    else:
-                        raise ValueError(f"Unsupported hole type: {hole['type']}")
-
-            elif elem_raw["type"] == "Floor":
-                elem = Floor(
-                    elem_raw["id"],
-                    [Point3D(*p) for p in elem_raw["points"]],
-                    elem_raw.get("depth", scene_arch["defaults"]["Floor"]["depth"]),
-                    elem_raw["materials"],
-                    room_id,
-                )
-                rooms[room_id].floor = elem
-
-            elif elem_raw["type"] == "Ceiling":
-                elem = Ceiling(
-                    elem_raw["id"],
-                    [Point3D(*p) for p in elem_raw["points"]],
-                    elem_raw.get("depth", scene_arch["defaults"]["Floor"]["depth"]),
-                    elem_raw["materials"],
-                    room_id,
-                )
-                rooms[room_id].ceiling = elem
-            else:
-                raise ValueError(f"Unsupported type: {elem['type']}")
-            elements.append(elem)
-
-        arch = Arch(elements=elements, rooms=list(rooms.values()))
-
-        return arch, base_scene, base_scene_aabb
-
-    def generate_layout(
-        self, layout_spec: SceneLayoutSpec, base_scene_aabb: BBox3D, model_name: Optional[str] = None
-    ) -> SceneLayout:
+    def generate_layout(self, layout_spec: SceneLayoutSpec, base_scene_aabb: BBox3D) -> SceneLayout:
         """Generate coarse scene layout given specification of architecture and room type.
 
         :param layout_spec: specification for architecture and room type
         :param model_name: name of model. If not provided, the default model is pulled from the configuration.
         :return: scene layout, including architecture and coarse object types and poses
         """
-        if model_name is None:
-            model_name = self.layout_cfg.default_model
-
-        # can set bounds based on scene itself, but the problem is that the object proximities are not really scaled
-        # appropriately, so either some objects will be out of scene or a lot of objects end up overlapping (or both)
-        # TODO: bounds need to be relative to object centroids rather than full extent of scene
-        base_scene_aabb_norm = BBox3D(
-            base_scene_aabb.min - base_scene_aabb.centroid, base_scene_aabb.max - base_scene_aabb.centroid
+        layout_model = build_model(
+            layout_spec, self.layout_model, self.layout_cfg, bounds=None, text_condition=self.pass_text
         )
-        bounds = {
-            "translations": [
-                [base_scene_aabb_norm.min.x, base_scene_aabb_norm.min.y, base_scene_aabb_norm.min.z],
-                [base_scene_aabb_norm.max.x, base_scene_aabb_norm.max.y, base_scene_aabb_norm.max.z],
-            ]
-        }
-        layout_model = build_model(layout_spec, model_name, self.layout_cfg, bounds=None)
         objects = layout_model.generate(layout_spec)
-        print(objects)
 
         layout = SceneLayout(
             objects=[
@@ -231,6 +137,14 @@ class SceneBuilder:
             ],
             arch=layout_spec.arch,
         )
+
+        # print layout
+        print("LAYOUT:")
+        for object_template in layout.objects:
+            print(
+                f" * {object_template.label}, at position {object_template.position} with orientation {object_template.orientation} and dimensions {object_template.dimensions}"
+            )
+
         if self.layout_cfg.export_layout:
             layout.export_coarse_layout("coarse_layout.obj")
         return layout
@@ -248,6 +162,9 @@ class SceneBuilder:
         for obj in scene_layout.objects:
             synset = obj.label
             dimensions = obj.dimensions
+
+            print(f"Retrieving {synset}")
+
             position = Point3D.add(
                 Point3D.fromlist(obj.position), base_scene_centroid
             )  # TODO heuristically re-center to base scene centroid
@@ -263,6 +180,8 @@ class SceneBuilder:
                 "allow_collisions": True,
             }
             scene_state = self.object_add(scene_state, object_spec, placement_spec)
+            print(f"New object: {scene_state['object'][-1]}")
+            print(f"Object count: {len(scene_state['object'])}")
 
         return Scene.from_json(scene_state)
 
@@ -280,7 +199,7 @@ class SceneBuilder:
             preRquat = Transform.get_alignment_quaternion([0, 0, 1], [0, 1, 0], [0, 1, 0], [0, 0, -1])
             preR = Transform()
             preR.set_rotation(preRquat)
-            for m in scene.modelInstances:
+            for m in scene.model_instances:
                 m.transform.rightMultiply(preR)
 
             # export scene
@@ -300,12 +219,14 @@ class SceneBuilder:
         """
         # generate or retrieve architecture
         # TODO: use input scene_spec instead of an arbitrary arch_spec
-        arch_spec = SceneSpec(type="id", input="102344115", format=scene_spec.format)
+        arch_spec = SceneSpec(type="id", input=None, format=scene_spec.format)
         arch, scene_state, base_scene_aabb = self.generate_arch(arch_spec)
         base_scene_centroid = base_scene_aabb.centroid
 
         # generate layout
         scene_layout_spec = SceneLayoutSpec(type=scene_spec.type, input=scene_spec.input, arch=arch)
+        if self.pass_text:
+            scene_layout_spec.raw = scene_spec.raw
         scene_layout = self.generate_layout(scene_layout_spec, base_scene_aabb)
 
         # generate or retrieve objects

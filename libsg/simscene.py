@@ -8,6 +8,7 @@ from scipy.spatial.transform import Rotation
 from libsg.simulator import Simulator
 from libsg.geo import Transform
 
+
 class SimScene:
     def __init__(self, sim: Simulator, scene, asset_paths, include_ground=False):
         self.sim = sim
@@ -22,10 +23,10 @@ class SimScene:
     def _create_scene_geometry(self, include_ground=False):
         use_y_up = self.use_y_up
         for el in self.scene.arch.elements:
-            if el.type == 'Wall':
+            if el.type == "Wall":
                 SimScene.add_wall(self.sim, el, use_y_up=use_y_up)
-        for mi in self.scene.modelInstances:
-            SimScene.add_object(self.sim, self.asset_paths['collision_mesh_dir'], mi, static=True)
+        for mi in self.scene.model_instances:
+            SimScene.add_object(self.sim, self.asset_paths["collision_mesh_dir"], mi, static=True)
         self.sim.set_single_collection_filter_group()
         self.aabb = self.sim.get_aabb_all()
         if include_ground:
@@ -34,27 +35,27 @@ class SimScene:
             pos = self.aabb.centroid.tolist()
             if use_y_up:
                 d1 = dims[2]
-                pos[1] = 0 #self.aabb.min[1]
+                pos[1] = 0  # self.aabb.min[1]
             else:
                 d1 = dims[1]
-                pos[2] = 0 #self.aabb.min[2]
+                pos[2] = 0  # self.aabb.min[2]
             self.ground = SimScene.add_ground(self.sim, d0, d1, 0.01, pos=pos, use_y_up=use_y_up)
 
     @staticmethod
-    def add_ground(sim, w, h, depth, pos=[0.0,0.0,0.0], use_y_up=False):
+    def add_ground(sim, w, h, depth, pos=[0.0, 0.0, 0.0], use_y_up=False):
         if use_y_up:
             half_extents = np.array([w, depth, h]) * 0.5
         else:
             half_extents = np.array([w, h, depth]) * 0.5
         transform = Transform()
         transform.set_translation(pos)
-        return sim.add_box(obj_id='ground', half_extents=half_extents, transform=transform, static=True)
+        return sim.add_box(obj_id="ground", half_extents=half_extents, transform=transform, static=True)
 
     @staticmethod
     def add_wall(sim, node, use_y_up=False):
         h = node.height
-        p0 = np.array(node.points[0])
-        p1 = np.array(node.points[1])
+        p0 = np.array(node.points[0].tolist())
+        p1 = np.array(node.points[1].tolist())
         c = (p0 + p1) * 0.5
         if use_y_up:
             c[1] += h * 0.5
@@ -65,19 +66,19 @@ class SimScene:
         dp = dp / dp_l
         angle = np.arccos(dp[0])
         if use_y_up:
-            rot_q = Rotation.from_euler('y', angle).as_quat()
+            rot_q = Rotation.from_euler("y", angle).as_quat()
             half_extents = np.array([dp_l, h, node.depth]) * 0.5
         else:
-            rot_q = Rotation.from_euler('z', angle).as_quat()
+            rot_q = Rotation.from_euler("z", angle).as_quat()
             half_extents = np.array([dp_l, node.depth, h]) * 0.5
         scale = np.array([1.0, 1.0, 1.0])
         transform = Transform.from_rts(rot_q, np.squeeze(c), scale)
-        return sim.add_box(obj_id=node.id, half_extents=half_extents,
-                        transform=transform, static=True)
+        return sim.add_box(obj_id=node.id, half_extents=half_extents, transform=transform, static=True)
 
     @staticmethod
     def convert_glb_to_obj(glb_path, obj_path):
         import struct
+
         # Load the glb file
         glb = pygltflib.GLTF2().load(glb_path)
 
@@ -110,9 +111,11 @@ class SimScene:
 
             # pull each vertex from the binary buffer and convert it into a tuple of python floats
             for i in range(accessor.count):
-                index = bufferView.byteOffset + accessor.byteOffset + i*12  # the location in the buffer of this vertex
-                d = data[index:index+12]  # the vertex data
-                v = struct.unpack("<fff", d)   # convert from base64 to three floats
+                index = (
+                    bufferView.byteOffset + accessor.byteOffset + i * 12
+                )  # the location in the buffer of this vertex
+                d = data[index : index + 12]  # the vertex data
+                v = struct.unpack("<fff", d)  # convert from base64 to three floats
                 vertices.append(v)
                 print(i, v)
 
@@ -120,7 +123,7 @@ class SimScene:
 
         # Write to obj file
         os.makedirs(os.path.dirname(obj_path), exist_ok=True)
-        with open(obj_path, 'w') as obj_file:
+        with open(obj_path, "w") as obj_file:
             for vertex in vertices:
                 obj_file.write(f"v {vertex[0]} {vertex[1]} {vertex[2]}\n")
 
@@ -129,7 +132,7 @@ class SimScene:
 
     @staticmethod
     def add_object(sim: Simulator, data_dir, node, static):
-        model_id = node.model_id.split('.')[1]
+        model_id = node.model_id.split(".")[1]
         if len(model_id) < 16:  # skip windows/doors
             return
         transform = node.transform
@@ -137,5 +140,6 @@ class SimScene:
         if not os.path.exists(col_obj_filename):
             col_glb_filename = os.path.join(data_dir, model_id[0], f"{model_id}.collider.glb")
             SimScene.convert_glb_to_obj(col_glb_filename, col_obj_filename)
-        return sim.add_mesh(obj_id=node.id, obj_file=col_obj_filename,
-                            transform=transform, vis_mesh_file=None, static=static)
+        return sim.add_mesh(
+            obj_id=node.id, obj_file=col_obj_filename, transform=transform, vis_mesh_file=None, static=static
+        )
