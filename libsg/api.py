@@ -202,20 +202,6 @@ def scene_modify(scene_state: SceneState, modify_spec: SceneModifySpec) -> Scene
     raise NotImplementedError
 
 
-# @app.route('/scene/retrieve')
-# def scene_retrieve(scene_spec: SceneSpec, **kwargs) -> SceneState:
-#     """Retrieve scene by ID.
-#
-#     TODO: API not tested yet
-#
-#     :param scene_spec: specification of scene to retrieve
-#     :return: scene state object specifying architecture and objects to use in scene, and their locations
-#     """
-#     scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout, **kwargs)
-#     scene_state = scene_builder.retrieve(scene_spec)
-#     return scene_state
-
-
 """
 Free form text-based API.
 A type field indicates input specification type and model/strategy to follow

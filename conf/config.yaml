@@ -6,8 +6,6 @@ scene_builder:
   arch_db:
     metadata: .data/datasets/structured3d/structured3d.rooms.csv
     path: "${base_url}/${rlsd_basepath}/arch/{scene_id}.arch.json"
-  # scene_db:
-  #   path: "${base_dir}/fpsb/scenes/cluttered/scenestate"
   model_db:
     source: "fpModel"
     mesh_dir: "${base_dir}/hssd-hab/objects"

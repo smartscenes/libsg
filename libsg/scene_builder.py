@@ -75,7 +75,6 @@ class SceneBuilder:
         self.layout_cfg = layout
         self.__base_solr_url = cfg.get("solr_url")
         self.__arch_builder = ArchBuilder(cfg.get("arch_db"))
-        # self.__scene_db = AssetDb("scene", cfg.get("scene_db"))
         self.__model_db = AssetDb("model", cfg.get("model_db"), solr_url=f"{self.__base_solr_url}/models3d")
         self.scene_exporter = SceneExporter()
         self.object_placer = ObjectPlacer(
@@ -240,19 +239,6 @@ class SceneBuilder:
 
     def modify(self, scene_state: JSONDict, description: str) -> JSONDict:
         raise NotImplementedError
-
-    # def retrieve(self, scene_spec: SceneSpec) -> JSONDict:
-    #     """Retrieve scene based on scene specification.
-
-    #     :param scene_spec: specification for scene to retrieve
-    #     :return: JSON of retrieved scene from database
-    #     """
-    #     if scene_spec.type == "id":
-    #         scenestate_path = self.__scene_db.get(scene_spec.input)
-    #         scenestate = json.load(open(scenestate_path, "r"))
-    #         return scenestate
-    #     else:
-    #         raise ValueError(f"Scene specification type not supported for retrieval: {scene_spec.type}")
 
     def object_remove(self, scene_state: SceneState, object_spec: ObjectSpec) -> JSONDict:
         """Remove existing object from given scene.
