@@ -19,7 +19,7 @@ from libsg.api import (
     object_add as object_add_api,
     object_remove as object_remove_api,
     scene_generate as scene_generate_api,
-    scene_retrieve as scene_retrieve_api,
+    # scene_retrieve as scene_retrieve_api,
 )
 from libsg.scene_types import (
     JSONDict,

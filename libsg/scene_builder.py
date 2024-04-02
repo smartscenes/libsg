@@ -75,10 +75,12 @@ class SceneBuilder:
         self.layout_cfg = layout
         self.__base_solr_url = cfg.get("solr_url")
         self.__arch_builder = ArchBuilder(cfg.get("arch_db"))
-        self.__scene_db = AssetDb("scene", cfg.get("scene_db"))
+        # self.__scene_db = AssetDb("scene", cfg.get("scene_db"))
         self.__model_db = AssetDb("model", cfg.get("model_db"), solr_url=f"{self.__base_solr_url}/models3d")
         self.scene_exporter = SceneExporter()
-        self.object_placer = ObjectPlacer(model_db=self.__model_db, size_threshold=cfg.model_db.get("size_threshold", 0.5))
+        self.object_placer = ObjectPlacer(
+            model_db=self.__model_db, size_threshold=cfg.model_db.get("size_threshold", 0.5)
+        )
         self.asset_source = cfg.model_db.source
 
         self.infer_missing_objects = kwargs.get("sceneInference.inferMissingObjects", False)
@@ -87,10 +89,7 @@ class SceneBuilder:
         pass_text = kwargs.get("sceneInference.passTextToLayout", "False").lower()
         if pass_text not in {"true", "false"}:
             raise ValueError(f"Invalid value for sceneInference.passTextToLayout: {pass_text}")
-        self.pass_text = (
-            pass_text == "true"
-            and self.layout_cfg.config[self.layout_model].can_condition_on_text
-        )
+        self.pass_text = pass_text == "true" and self.layout_cfg.config[self.layout_model].can_condition_on_text
 
     def generate_arch(self, scene_spec: SceneSpec) -> tuple[Architecture, JSONDict, BBox3D]:
         """Generate architecture for scene.
@@ -103,7 +102,9 @@ class SceneBuilder:
         scene, as calculated by the min/max AABB of all elements in the scene.
         """
         # load base scene and clear default layout objects
-        arch = self.__arch_builder.retrieve(scene_spec.input, min_size=self.layout_cfg.min_room_size)  # FIXME: this should be parametrized somehow based on the room type
+        arch = self.__arch_builder.retrieve(
+            scene_spec.input, min_size=self.layout_cfg.min_room_size
+        )  # FIXME: this should be parametrized somehow based on the room type
         base_scene = Scene.from_arch(arch, asset_source=self.asset_source)
 
         # compute base scene AABB to transform object positions later
@@ -149,7 +150,9 @@ class SceneBuilder:
             layout.export_coarse_layout("coarse_layout.obj")
         return layout
 
-    def generate_objects(self, scene_state: JSONDict, base_scene_centroid: Point3D, scene_layout: SceneLayout) -> Scene:
+    def generate_objects(
+        self, scene_state: JSONDict, base_scene_centroid: Point3D, scene_layout: SceneLayout
+    ) -> Scene:
         """Generate object based on scene state, with placement relative to base scene centroid
 
         :param scene_state: base scene state including architecture only
@@ -238,18 +241,18 @@ class SceneBuilder:
     def modify(self, scene_state: JSONDict, description: str) -> JSONDict:
         raise NotImplementedError
 
-    def retrieve(self, scene_spec: SceneSpec) -> JSONDict:
-        """Retrieve scene based on scene specification.
+    # def retrieve(self, scene_spec: SceneSpec) -> JSONDict:
+    #     """Retrieve scene based on scene specification.
 
-        :param scene_spec: specification for scene to retrieve
-        :return: JSON of retrieved scene from database
-        """
-        if scene_spec.type == "id":
-            scenestate_path = self.__scene_db.get(scene_spec.input)
-            scenestate = json.load(open(scenestate_path, "r"))
-            return scenestate
-        else:
-            raise ValueError(f"Scene specification type not supported for retrieval: {scene_spec.type}")
+    #     :param scene_spec: specification for scene to retrieve
+    #     :return: JSON of retrieved scene from database
+    #     """
+    #     if scene_spec.type == "id":
+    #         scenestate_path = self.__scene_db.get(scene_spec.input)
+    #         scenestate = json.load(open(scenestate_path, "r"))
+    #         return scenestate
+    #     else:
+    #         raise ValueError(f"Scene specification type not supported for retrieval: {scene_spec.type}")
 
     def object_remove(self, scene_state: SceneState, object_spec: ObjectSpec) -> JSONDict:
         """Remove existing object from given scene.

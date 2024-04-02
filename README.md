@@ -40,16 +40,13 @@ libsg  # main code
 
 1. Create a base directory for data and set `base_dir` in [conf/config.yaml] to your base directory.
 
-2. Clone the [Floorplanner SceneBuilder (FPSB) repository](https://huggingface.co/datasets/3dlg-hcvc/fpsb) into 
-`base_dir` to get the floorplanner scenes (Please contact the authors concerning access.)
-
-3. Clone the [fphab repository](https://huggingface.co/datasets/fpss/fphab) into `base_dir` to get the GLB objects used 
-during retrieval.
-
-4. To use the structured3d dataset of room architectures, you must link the [configuration](conf/config.yaml) to the 
+2. To use the structured3d dataset of room architectures, you must link the [configuration](conf/config.yaml) to the 
 structured3d.rooms.csv file, which can be retrieved at present 
 [here](https://github.com/3dlg-hcvc/scene-toolkit/blob/master/server/static/data/structured3d/structured3d.rooms.csv). 
 Please contact the authors concerning access. Modify the `arch_db` parameters to link to the CSV for scene lookup.
+
+3. (Optional) Clone the [hssd-hab repository](https://huggingface.co/datasets/hssd/hssd-hab) into `base_dir` to get the GLB objects 
+used during retrieval to check object collision detection during placement.
 
 ## Local development
 
