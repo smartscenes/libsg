@@ -6,6 +6,7 @@ data:
   room_dims: [6.2, 6.2]  # in meters; [x_max - x_min, y_max - y_min]
   bounds: {sizes: [[0.03998288, 0.02000002, 0.012772], [2.8682, 1.770065, 1.698315]], translations: [[-2.7625005, 0.045, -2.75275], [2.77844175, 3.6248396, 2.81854277]], angles: [-3.14159265, 3.14159265]}
   classes: [armchair.n.01, bookcase.n.01, cabinet.n.01, ceiling_lamp.n.01, chair.n.01, cabinet.n.01, coffee_table.n.01, desk.n.01, double_bed.n.01, chair.n.01, dressing_table.n.01, bunk_bed.n.01, nightstand.n.01, pendant_lamp.n.01, shelf.n.01, single_bed.n.01, sofa.n.01, stool.n.01, table.n.02, tv_stand.n.01, wardrobe.n.01, start, end]
+  raw_classes: ["armchair", "bookcase", "cabinet", "ceiling lamp", "chair", "children cabinet", "coffee table", "desk", "single bed", "dressing chair", "dressing table", "kids bed", "nightstand", "pendant lamp", "shelf", "single bed", "sofa", "stool", "table", "tv stand", "wardrobe"]
   up_axis: "y"
 export_room_mask: true
 

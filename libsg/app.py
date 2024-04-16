@@ -10,6 +10,7 @@ import os
 import traceback
 
 import flask
+from dotenv import load_dotenv
 from flask import jsonify, request
 from flask_restx import Api, Resource, fields
 from werkzeug.exceptions import HTTPException
@@ -19,6 +20,7 @@ from libsg.api import (
     object_add as object_add_api,
     object_remove as object_remove_api,
     scene_generate as scene_generate_api,
+    scene_retrieve as scene_retrieve_api,
 )
 from libsg.scene_types import (
     JSONDict,
@@ -27,6 +29,7 @@ from libsg.scene_types import (
     SceneType,
 )
 
+load_dotenv()
 
 app = flask.Flask(__name__)
 api = Api(
@@ -119,6 +122,20 @@ PlacementSpecModel = api.model(
 def scenestate_json_wrapper(scenestate) -> JSONDict:
     """Generate JSON wrapper around scene state input"""
     return {"format": "sceneState", "scene": scenestate}
+
+
+@app.route("/scene/retrieve/", defaults={"id": "102344115"}, methods=["GET", "POST"])
+@app.route("/scene/retrieve/<id>", methods=["GET", "POST"])
+def scene_retrieve(id) -> SceneState:
+    """Retrieve scene by ID.
+
+    :param id: scene ID
+    :return: scene state corresponding to ID
+    """
+    format_ = request.json.get("format", "STK")
+    config = request.json.get("config", {})
+    scene_spec = SceneSpec(type="id", input=id, format=format_)
+    return scene_retrieve_api(scene_spec, **config)
 
 
 @app.route("/scene/generate", methods=["GET", "POST"])

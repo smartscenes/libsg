@@ -1,4 +1,9 @@
-from libsg.scene_types import SceneSpec, SceneType
+from pprint import pprint
+
+from omegaconf import DictConfig
+
+from libsg.scene_types import SceneSpec
+from libsg.model.sg_parser import build_parser_model
 
 
 class SceneParser:
@@ -11,26 +16,20 @@ class SceneParser:
     scene graph or other representation.
     """
 
+    def __init__(self, cfg: DictConfig, **kwargs) -> None:
+        self.model_name = kwargs.get("sceneInference.parserModel", cfg.default_model)
+        self.cfg = cfg
+
     def parse(self, scene_spec: SceneSpec) -> SceneSpec:
         """Parse scene description into a structured scene specification.
-
-        The parsing function currently expects a "text" type scene specification and expects to find one of the
-        following key phrases—"living room", "dining room", or "bedroom"—in the text description, which is used to
-        specify the scene room type to generate. As of now, the scene parsing is fairly rudimentary and does not use
-        any other information in the scene specification.
 
         :param scene_spec: unstructured scene specification
         :raises ValueError: scene spec type or room type not supported for parsing
         :return: structured scene specification
         """
-        if scene_spec.type == SceneType.text:
-            if "living room" in scene_spec.input:
-                return SceneSpec(type=SceneType.category, input="living_room", format=scene_spec.format, raw=scene_spec.input)
-            elif "dining room" in scene_spec.input:
-                return SceneSpec(type=SceneType.category, input="dining_room", format=scene_spec.format, raw=scene_spec.input)
-            elif "bedroom" in scene_spec.input:
-                return SceneSpec(type=SceneType.category, input="bedroom", format=scene_spec.format, raw=scene_spec.input)
-            else:
-                raise ValueError(f"Cannot parse room type from scene specification: {scene_spec.input}")
-        else:
-            raise ValueError(f"Cannot parse scene type from scene specification: {scene_spec.type}")
+        parser_model = build_parser_model(scene_spec, self.model_name, self.cfg)
+        parsed_spec = parser_model.parse(scene_spec)
+        print("Scene Graph:")
+        pprint(parsed_spec.scene_graph)
+
+        return parsed_spec

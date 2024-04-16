@@ -1,0 +1,264 @@
+"""
+object_builder.py
+---
+This code is intended to support generation and retrieval of scene objects.
+"""
+
+import copy
+import logging
+import os
+import random
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+from functools import cached_property
+from typing import Optional, Union
+
+import numpy as np
+import torch
+from filelock import FileLock
+from omegaconf import DictConfig
+from shap_e.diffusion.sample import sample_latents
+from shap_e.models.download import load_model, load_config
+from shap_e.models.nn.camera import DifferentiableCameraBatch, DifferentiableProjectiveCamera
+from shap_e.models.transmitter.base import Transmitter, VectorDecoder
+from shap_e.diffusion.gaussian_diffusion import diffusion_from_config
+from shap_e.rendering.torch_mesh import TorchMesh
+from shap_e.util.collections import AttrDict
+
+from libsg.assets import AssetDb, ThreedFutureAssetDB
+from libsg.scene import ModelInstance
+from libsg.scene_types import ObjectSpec, PlacementSpec, Point3D
+
+
+@dataclass
+class Placement:
+    """Dataclass for object and its placement in scene"""
+
+    position: Point3D = None
+    up: Point3D = None
+    front: Point3D = None
+    ref_object: Union[ModelInstance, str] = None
+    spec: PlacementSpec = None
+
+
+class ObjectBuilder:
+    """
+    Build or retrieve objects for scenes.
+    """
+
+    DEFAULT_UP = [0, 0, 1]
+    DEFAULT_FRONT = [0, 1, 0]
+    LAST_ARCH = None
+
+    def __init__(self, model_db: AssetDb, cfg: DictConfig):
+        self.__model_db = model_db
+        # TODO: maybe we want source to be potentially different from asset to asset, so instead we could specify this
+        # in the object spec or just return it based on the selected model (probably better esp. if we are combining
+        # multiple datasets).
+        self.__threed_future_db = ThreedFutureAssetDB(cfg.threed_future_db)
+
+        # object retrieval parameters
+        self.size_threshold = cfg.get("size_threshold", 0.5)
+
+        # object generation parameters
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.batch_size = cfg.generation.get("batch_size", 1)
+        self.guidance_scale = cfg.generation.get("guidance_scale", 15.0)
+        self.gen_output_dir = cfg.generation.get("output_dir")
+        self.gen_metadata = cfg.generation.get("metadata_file")
+
+        if self.gen_output_dir:
+            os.makedirs(self.gen_output_dir, exist_ok=True)
+
+    @cached_property
+    def generation_text_model(self):
+        return load_model("text300M", device=self.device)
+
+    @cached_property
+    def generation_xm_model(self):
+        return load_model("transmitter", device=self.device)
+
+    @cached_property
+    def generation_diffusion_model(self):
+        return diffusion_from_config(load_config("diffusion"))
+
+    @staticmethod
+    def get_source(gen_method, retrieve_type):
+        if gen_method == "generate":
+            return "t2sModel"
+        else:
+            if retrieve_type == "category":
+                return "fpModel"
+            elif retrieve_type == "embedding":
+                return "3dfModel"
+
+    def generate(self, object_spec: ObjectSpec, placement_spec: PlacementSpec, **kwargs) -> ModelInstance:
+        assert self.gen_output_dir is not None, "Generation output directory must be set to generate objects"
+
+        # TODO: move this out into a separate model file for generation
+        latents = sample_latents(
+            batch_size=self.batch_size,
+            model=self.generation_text_model,
+            diffusion=self.generation_diffusion_model,
+            guidance_scale=self.guidance_scale,
+            model_kwargs=dict(texts=[object_spec.description] * self.batch_size),
+            progress=True,
+            clip_denoised=True,
+            use_fp16=True,
+            use_karras=True,
+            karras_steps=64,
+            sigma_min=1e-3,
+            sigma_max=160,
+            s_churn=0,
+        )
+
+        assert len(latents) >= 1
+        for i, latent in enumerate(latents):
+            model_id = str(uuid.uuid4())
+            t = self._decode_latent_mesh(self.generation_xm_model, latent).tri_mesh()
+
+            # move origin to bottom of model
+            t.verts[:, 2] -= np.min(t.verts[:, 2])
+
+            # # rescale object to size
+            # if object_spec.dimensions:
+            #     # normalize to [0, 1]
+            #     verts_norm = (t.verts - np.min(t.verts, axis=0)) / (np.max(t.verts, axis=0) - np.min(t.verts, axis=0))
+
+            #     # scale to object dimensions
+            #     t.verts = verts_norm * np.expand_dims(np.array(object_spec.dimensions), axis=0)
+
+            #     # recenter object
+            #     t.verts[:, :2] -= np.mean(t.verts[:, :2], axis=0)
+
+            os.makedirs(os.path.join(self.gen_output_dir, model_id), exist_ok=True)
+            with open(os.path.join(self.gen_output_dir, model_id, "raw_model.obj"), "w") as f:
+                t.write_obj(f)
+
+            print(f"Writing new object {model_id} metadata ('{object_spec.description}') to {self.gen_metadata}...")
+            lock = FileLock(f"{self.gen_metadata}.lock")
+            with lock:
+                with open(self.gen_metadata, "a") as f:
+                    f.write(f'{model_id},"{object_spec.description}","{datetime.now()}"\n')
+
+        # FIXME: there is probably a better way to add the prefix source
+        return ModelInstance(model_id=f"t2sModel.{model_id}", up=[0, 0, 1], front=[0, 1, 0])
+
+    def _create_pan_cameras(self, size: int, device: torch.device) -> DifferentiableCameraBatch:
+        origins = []
+        xs = []
+        ys = []
+        zs = []
+        for theta in np.linspace(0, 2 * np.pi, num=20):
+            z = np.array([np.sin(theta), np.cos(theta), -0.5])
+            z /= np.sqrt(np.sum(z**2))
+            origin = -z * 4
+            x = np.array([np.cos(theta), -np.sin(theta), 0.0])
+            y = np.cross(z, x)
+            origins.append(origin)
+            xs.append(x)
+            ys.append(y)
+            zs.append(z)
+        return DifferentiableCameraBatch(
+            shape=(1, len(xs)),
+            flat_camera=DifferentiableProjectiveCamera(
+                origin=torch.from_numpy(np.stack(origins, axis=0)).float().to(device),
+                x=torch.from_numpy(np.stack(xs, axis=0)).float().to(device),
+                y=torch.from_numpy(np.stack(ys, axis=0)).float().to(device),
+                z=torch.from_numpy(np.stack(zs, axis=0)).float().to(device),
+                width=size,
+                height=size,
+                x_fov=0.7,
+                y_fov=0.7,
+            ),
+        )
+
+    @torch.no_grad()
+    def _decode_latent_mesh(self, xm: Transmitter | VectorDecoder, latent: torch.Tensor) -> TorchMesh:
+        decoded = xm.renderer.render_views(
+            AttrDict(cameras=self._create_pan_cameras(2, latent.device)),  # lowest resolution possible
+            params=(xm.encoder if isinstance(xm, Transmitter) else xm).bottleneck_to_params(latent[None]),
+            options=AttrDict(rendering_mode="stf", render_with_direction=False),
+        )
+        return decoded.raw_meshes[0]
+
+    def modify(self, arch: ModelInstance, modify_spec: ObjectSpec) -> ModelInstance:
+        pass
+
+    def retrieve(
+        self, object_spec: ObjectSpec, placement_spec: PlacementSpec, *, dataset_name: Optional[str] = None, **kwargs
+    ) -> ModelInstance:
+        """
+        Retrieve object from database.
+
+        FIXME: in practice would prefer not to pass the dataset_name, but needed for diffuscene 3D-FUTURE assets for
+        now.
+        """
+        match object_spec.type:
+            case "model_id":
+                model_id = object_spec.description
+                model_instance = ModelInstance(model_id=model_id)
+
+            case "category":  # use solr to search based on wnsynsetkey
+                query = object_spec.description if object_spec.description else "*"
+                fq = self._build_object_query(object_spec, placement_spec)
+                results = self.__model_db.search(query, fl="fullId", fq=fq, rows=25000)
+
+                # ignore parts
+                results = filter(lambda r: "_part_" not in r["fullId"], results)
+
+                model_ids = list([result["fullId"] for result in results])
+                if len(model_ids) == 0:
+                    raise ValueError(f'Cannot find object matching query "{query}" with filter "{fq}"')
+
+                # filter by size
+                if object_spec.dimensions:
+                    dim_sorted_models = self.__model_db.sort_by_dim(model_ids, object_spec.dimensions)
+                    total = sum(object_spec.dimensions) ** 2
+                    trunc_sorted = [m for m in dim_sorted_models if m["dim_se"] < self.size_threshold * total]
+                    if len(trunc_sorted) > 0:
+                        selected_metadata = random.choice(trunc_sorted)
+                    else:
+                        logging.warning(
+                            f"No models found within size threshold for object category {object_spec.wnsynsetkey} with size {object_spec.dimensions}",
+                        )
+                        selected_metadata = dim_sorted_models[0]
+                else:
+                    model_id = random.choice(model_ids)
+                    selected_metadata = self.__model_db.get_metadata_for_ids([model_id])[0]
+
+                model_id = selected_metadata["fullId"]
+                up = selected_metadata["up"]
+                front = selected_metadata["front"]
+                model_instance = ModelInstance(model_id=model_id, up=up, front=front)
+
+            case "embedding":
+                if object_spec.embedding is None:
+                    raise ValueError(
+                        f"Embedding must be provided for embedding search, but received instead: {object_spec}"
+                    )
+                model = self.__threed_future_db.retrieve_by_embedding(object_spec, dataset_name=dataset_name)
+                model_instance = ModelInstance(model_id=f"3dfModel.{model.model_jid}", up=model.up, front=model.front)
+
+        return model_instance
+
+    # construct object solr query constraints (source, synset, support etc.)
+    def _build_object_query(self, object_spec: ObjectSpec, placement_spec: Optional[PlacementSpec] = None):
+        """Construct query constraints for solr query into object database"""
+
+        fq = f'+source:{self.__model_db.config["source"]}'
+        if object_spec.wnsynsetkey:
+            fq += f" +wnhypersynsetkeys:{object_spec.wnsynsetkey}"
+        if not placement_spec:
+            return fq
+        reference_object = PlacementSpec.get_placement_reference_object(placement_spec)
+        if reference_object:
+            match reference_object.description.lower():
+                case "wall":
+                    fq = fq + " +support:vertical"
+                case "ceiling":
+                    fq = fq + " +support:top"
+                case _:
+                    fq = fq + " -support:top -support:vertical"
+        return fq

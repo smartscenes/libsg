@@ -207,7 +207,7 @@ class Point3D(Point):
         rotvec[axis] = angle
         new_point = Rotation.from_rotvec(rotvec).as_matrix() @ np.array(point)
         return self.__class__.fromlist(new_point)
-    
+
     def translate(self, vec: np.array) -> Self:
         point = np.array(self.tolist())
         transformed = point + vec
@@ -520,7 +520,6 @@ class Wall(ArchElement):
             obj["roomId"],
         )
         return wall
-    
 
 
 class ArchHorizontalPlane(ArchElement):
@@ -707,6 +706,8 @@ class SceneSpec:
     input: str
     format: str  # HAB, STK
     raw: Optional[str] = None
+    scene_graph: Optional[JSONDict] = None
+    room_type: Optional[str] = None
 
 
 @dataclass
@@ -719,18 +720,21 @@ class SceneLayoutSpec:
     input: str
     arch: Optional[Architecture] = None
     raw: Optional[str] = None
+    graph: Optional[JSONDict] = None
 
 
 @dataclass
 class ObjectTemplateInstance:
     """Specification of coarse object instance"""
 
-    label: torch.Tensor | str  # tensor representation of object class or str name of object
+    label: str  # str name of object
 
     # TODO: use BBox3D + Transform instead of separate tensors for this
     dimensions: torch.Tensor  # tensor of dimensions for each object
     position: torch.Tensor  # tensor of positions for each object
     orientation: torch.Tensor  # tensor of angles to apply to each object
+    description: Optional[str] = None  # str description of object
+    embedding: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -741,6 +745,7 @@ class SceneLayout:
 
     objects: list[ObjectTemplateInstance]
     arch: Optional[Architecture] = None
+    room_type: Optional[str] = None
 
     NEAR_FLOOR_HEIGHT = 0.05
     BOX_MESH_VERTICES = [
@@ -798,6 +803,14 @@ class SceneLayout:
                 for v1, v2, v3 in self.BOX_MESH_VERTICES:
                     f.write(f"f {b_idx * 8 + v1} {b_idx * 8 + v2} {b_idx * 8 + v3}\n")
 
+    def print_layout(self):
+        """Print layout to console"""
+        print("LAYOUT:")
+        for object_template in self.objects:
+            print(
+                f" * {object_template.label}, at position {object_template.position} with orientation {object_template.orientation} and dimensions {object_template.dimensions}"
+            )
+
 
 class SceneModifySpec:
     """Specification for scene modifications"""
@@ -807,34 +820,40 @@ class SceneModifySpec:
         self.input
 
 
-class PlacementSpec:
-    """Specification of placement for an object"""
-
-    def __init__(self):
-        self.type  # type is point3d or relationship wrt another object
-        self.placement
-
-    @classmethod
-    def get_placement_reference_object(cls, placement_spec):
-        if placement_spec.type == "placement_relation":
-            return placement_spec.reference
-
-
+@dataclass
 class ObjectSpec:
     """Specification for object to add"""
 
-    def __init__(self):
-        self.type  # type is id, category, or text description
-        self.object
+    type: str  # type is id, category, text, or embedding
+    description: Optional[str] = None
+    wnsynsetkey: Optional[str] = None
+    dimensions: Optional[list[float]] = None
+    embedding: Optional[np.ndarray] = None
 
     @classmethod
     def is_arch(cls, object_spec) -> bool:
         """Return True if object is a wall, ceiling, or floor"""
         if object_spec.type == "category":
-            element_type = object_spec.object.lower()
+            element_type = object_spec.description.lower()
             return element_type in ["wall", "ceiling", "floor"]
         else:
             return False
+
+
+@dataclass
+class PlacementSpec:
+    """Specification of placement for an object"""
+
+    type: str  # "placement_point", "placement_relation"
+    position: Optional[Point3D] = None
+    orientation: Optional[float] = None
+    allow_collisions: bool = True
+    reference: Optional[ObjectSpec] = None
+
+    @classmethod
+    def get_placement_reference_object(cls, placement_spec):
+        if placement_spec.type == "placement_relation":
+            return placement_spec.reference
 
 
 class MoveSpec:

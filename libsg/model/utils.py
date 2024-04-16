@@ -16,8 +16,22 @@ def square_room_mask(room_dim=64, floor_perc=0.8) -> torch.Tensor:
     return room_mask
 
 
-def descale(x, minimum: np.ndarray | torch.Tensor | float, maximum: np.ndarray | torch.Tensor | float) -> np.ndarray | torch.Tensor | float:
+def descale(
+    x, minimum: np.ndarray | torch.Tensor | float, maximum: np.ndarray | torch.Tensor | float
+) -> np.ndarray | torch.Tensor | float:
     """Apply scaling to convert x from range (-1, 1) to (minimum, maximum)"""
     x = (x + 1) / 2
     x = x * (maximum - minimum) + minimum
     return x
+
+
+class ObjectClassNotFoundError(Exception):
+    """Exception raised when structured scene representation specifices out-of-distribution object classes"""
+
+    pass
+
+
+class EdgeRelationshipNotFoundError(Exception):
+    """Exception raised when structured scene representation specifices out-of-distribution edge relationships"""
+
+    pass

@@ -1,0 +1,70 @@
+data:
+    dataset_type: "cached_threedfront"
+    encoding_type: "cached_graph_sincos_angle_sg2sc"
+    augmentations: ["fixed_rotation"]
+    dataset_directory: "dataset/InstructScene/threed_front_livingroom"
+    annotation_file: "configs/livingroom_threed_front_splits.csv"
+    path_to_invalid_scene_ids: "configs/invalid_threed_front_rooms.txt"
+    path_to_invalid_bbox_jids: "configs/black_list.txt"
+    path_to_floor_plan_textures: "configs/floor_plan_texture_images"
+    path_to_pickled_3d_futute_models: "dataset/InstructScene/threed_future_model_livingroom.pkl"
+    filter_fn: "threed_front_livingroom"
+    train_stats: "dataset_stats.txt"
+    room_layout_size: "64,64"
+    max_length: 21
+    classes: [armchair.n.01, bookcase.n.01, cabinet.n.01, ceiling_lamp.n.01, chaise_longue.n.01, chair.n.01, coffee_table.n.01, console_table.n.01, table.n.02, desk.n.01, chair.n.01, dining_table.n.01, l-shaped_couch.n.01, sofa.n.01, chair.n.01, chair.n.01, sofa.n.01, pendant_lamp.n.01, end_table.n.01, shelf.n.01, stool.n.01, tv_stand.n.01, wardrobe.n.01, wine_rack.n.01, start, end]
+    raw_classes: ["armchair", "bookcase", "cabinet", "ceiling lamp", "chaise longue sofa", "chinese chair", "coffee table", "console table", "corner/side table", "desk", "dining chair", "dining table", "l-shaped sofa", "lazy sofa", "lounge chair", "loveseat sofa", "multi-seat sofa", "pendant lamp", "round end table", "shelf", "stool", "tv stand", "wardrobe", "wine cabinet"]
+    predicate_types: ["above", "left of", "in front of", "closely left of", "closely in front of", "below", "right of", "behind", "closely right of", "closely behind"]
+    reverse_predicates:
+        "above": "below"
+        "below": "above"
+        "in front of": "behind"
+        "behind": "in front of"
+        "left of": "right of"
+        "right of": "left of"
+        "closely in front of": "closely behind"
+        "closely behind": "closely in front of"
+        "closely left of": "closely right of"
+        "closely right of": "closely left of"
+    bounds: {sizes: [[0.032552000000000025, 0.020000020334800084, 0.009999999999999884], [2.3802699999999994, 1.7700649999999998, 1.4137885]], translations: [[-5.089109999999999, 0.0375, -5.716401580065309], [5.09667921844729, 3.384158412231445, 5.4048500000000015]], angles: [-3.141592653589793, 3.141592653589793]}
+    up_axis: "y"
+export_room_mask: false
+
+network:
+    name: "vq_objfeat_sg_gtf"
+    text_encoder: "ViT-bigG-14"
+    ckpt_dir: .data/models/instructscene/livingroom/sg_to_sc
+    ckpt_epoch: null
+    objfeat_bounds: .data/models/instructscene/objfeat_bounds.pkl
+    vqvae_checkpoint: .data/models/instructscene/threedfront_objfeat_vqvae_epoch_01999.pth
+    cfg_scale: 1.
+    room_mask_condition: false  # currently ignored
+
+training:
+    splits: ["train", "val"]
+    epochs: 2000
+    steps_per_epoch: 500
+    batch_size: 128
+    save_frequency: 10
+    log_frequency: 1
+    optimizer:
+        name: "adamw"
+        lr: 0.0001
+        weight_decay: 0.02
+    loss_weights:
+        pos_mse: 1.
+        size_mse: 1.
+        angle_mse: 1.
+    ema:
+        use_ema: true
+        max_decay: 0.9999
+        min_decay: 0.
+        update_after_step: 0
+        use_warmup: true
+        inv_gamma: 1.
+        power: 0.75
+
+validation:
+    splits: ["test"]
+    batch_size: 256
+    frequency: 1

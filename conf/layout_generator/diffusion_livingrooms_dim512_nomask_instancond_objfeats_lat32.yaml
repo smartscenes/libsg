@@ -15,8 +15,10 @@ data:
     room_dims: [6.2, 6.2]  # in meters; [x_max - x_min, y_max - y_min]
     max_length: 21
     classes: [armchair.n.01, bookcase.n.01, cabinet.n.01, ceiling_lamp.n.01, chaise_longue.n.01, chair.n.01, coffee_table.n.01, console_table.n.01, table.n.02, desk.n.01, chair.n.01, dining_table.n.01, l-shaped_couch.n.01, sofa.n.01, chair.n.01, chair.n.01, sofa.n.01, pendant_lamp.n.01, end_table.n.01, shelf.n.01, stool.n.01, tv_stand.n.01, wardrobe.n.01, wine_rack.n.01, start, end]
+    raw_classes: ["armchair", "bookcase", "cabinet", "ceiling lamp", "chaise longue sofa", "chinese chair", "coffee table", "console table", "corner/side table", "desk", "dining chair", "dining table", "l-shaped sofa", "lazy sofa", "lounge chair", "loveseat sofa", "multi-seat sofa", "pendant lamp", "round end table", "shelf", "stool", "tv stand", "wardrobe", "wine cabinet"]
     up_axis: "y"
 export_room_mask: true
+export_embeddings: true
 
 network:
     type: "diffusion_scene_layout_ddpm"

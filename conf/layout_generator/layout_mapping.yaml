@@ -6,11 +6,17 @@ config:
     load_by_spec: true
     can_condition_on_text: false
     bedroom: atiss_bedroom.yaml
-    dining_room: atiss_diningroom.yaml
-    living_room: atiss_livingroom.yaml
+    diningroom: atiss_diningroom.yaml
+    livingroom: atiss_livingroom.yaml
   DiffuScene:
     load_by_spec: true
     can_condition_on_text: true
     bedroom: diffusion_bedrooms_dim512_nomask_instancond_objfeats_lat32.yaml
-    dining_room: diffusion_diningrooms_dim512_nomask_instancond_objfeats_lat32.yaml
-    living_room: diffusion_livingrooms_dim512_nomask_instancond_objfeats_lat32.yaml
+    diningroom: diffusion_diningrooms_dim512_nomask_instancond_objfeats_lat32.yaml
+    livingroom: diffusion_livingrooms_dim512_nomask_instancond_objfeats_lat32.yaml
+  InstructScene:
+    load_by_spec: true
+    can_condition_on_text: true
+    bedroom: instructscene_bedroom_sg2sc_diffusion_objfeat.yaml
+    diningroom: instructscene_diningroom_sg2sc_diffusion_objfeat.yaml
+    livingroom: instructscene_livingroom_sg2sc_diffusion_objfeat.yaml

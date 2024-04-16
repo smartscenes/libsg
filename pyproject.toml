@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "libsg"
-version = "0.0.1rc7"
+version = "0.3.0"
 authors = [
   { name="Manolis Savva", email="manolis.savva@gmail.com" },
 ]
@@ -30,6 +30,8 @@ dependencies = [
     "torch",
     "torchvision",
     "pytorch-fast-transformers",  # last, undeclared dep on torch
+    "shap_e@git+https://github.com/openai/shap-e.git",
+    "openai==1.12.0"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

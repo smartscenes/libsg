@@ -4,6 +4,8 @@ object_placement.py
 Code related to placement of objects in scenes.
 """
 
+import copy
+import logging
 import random
 import sys
 from dataclasses import dataclass
@@ -34,27 +36,27 @@ class Placement:
 class ObjectPlacer:
     """Place objects in scene with collision avoidance."""
 
-    def __init__(self, model_db: AssetDb, size_threshold=0.5):
+    def __init__(self, model_db: AssetDb, size_threshold=0.5, allow_collisions: bool = True, max_tries: int = 1):
         self.__model_db = model_db
         self.size_threshold = size_threshold
+        self.allow_collisions = allow_collisions
+        self.max_tries = max_tries
 
     def _resolve_placement_spec(
         self, placement_spec: PlacementSpec, scene: Scene, object_to_place: ModelInstance
     ) -> Placement:
         placement = Placement(object=object_to_place, spec=placement_spec)
-        if "position" in placement_spec:
-            placement.position = placement_spec.position
-        if "orientation" in placement_spec:
-            placement.front = Transform.get_rotated_vector([0, 0, placement_spec.orientation], [1, 0, 0])
+        placement.position = placement_spec.position
+        placement.front = Transform.get_rotated_vector([0, 0, placement_spec.orientation], [1, 0, 0])
 
         if placement_spec.type == "placement_relation":
-            placement.ref_object = self._resolve_object_spec_to_element_in_scene(scene, placement_spec.reference)
+            placement.ref_object = self.resolve_object_spec_to_element_in_scene(scene, placement_spec.reference)
             if placement_spec.relation == "next":
                 placement = self._place_next(scene, placement)
             elif placement_spec.relation == "on":
                 placement = self._place_on(scene, placement)
-        else:
-            print(f"Unsupported placement_spec.type={placement_spec.type}", file=sys.stderr)
+        # else:
+        #     print(f"Unsupported placement_spec.type={placement_spec.type}", file=sys.stderr)
         return placement
 
     def _place_on(self, scene: Scene, placement: Placement) -> Placement:
@@ -141,7 +143,7 @@ class ObjectPlacer:
         return placement
 
     # Note: will return either object or architectural element
-    def _resolve_object_spec_to_element_in_scene(self, scene: Scene, object_spec: ObjectSpec):
+    def resolve_object_spec_to_element_in_scene(self, scene: Scene, object_spec: ObjectSpec):
         object = None
         if object_spec.type == "object_id":
             object = scene.get_element_by_id(object_spec.object)
@@ -164,60 +166,6 @@ class ObjectPlacer:
         else:
             print(f"Unsupported object_spec.type={object_spec.type}", file=sys.stderr)
         return object
-
-    # construct object solr query constraints (source, synset, support etc.)
-    def object_query_constraints(self, object_spec, placement_spec=None, scene=None):
-        """Construct query constraints for solr query into object database"""
-
-        fq = f'+source:{self.__model_db.config["source"]}'
-        if "wnsynsetkey" in object_spec:
-            fq += f" +wnhypersynsetkeys:{object_spec.wnsynsetkey}"
-        if not placement_spec:
-            return fq
-        reference_object_spec = PlacementSpec.get_placement_reference_object(placement_spec)
-        if reference_object_spec:
-            reference_object = self._resolve_object_spec_to_element_in_scene(scene, reference_object_spec)
-            element_type = reference_object.type.lower()
-            if element_type == "wall":
-                fq = fq + " +support:vertical"
-            elif element_type == "ceiling":
-                fq = fq + " +support:top"
-            else:
-                fq = fq + " -support:top -support:vertical"
-        return fq
-
-    def _resolve_object_spec_to_model_id(
-        self, scene: Scene, object_spec: ObjectSpec, placement_spec: PlacementSpec = None
-    ):
-        model_id = None
-        if object_spec.type == "object_id":
-            model_id = scene.get_object_by_id(object_spec.object).model_id
-        elif object_spec.type == "model_id":
-            model_id = object_spec.object
-        elif object_spec.type == "category":
-            query = object_spec.get("object", "*")
-            fq = self.object_query_constraints(object_spec, placement_spec, scene)
-            results = self.__model_db.search(query, fl="fullId", fq=fq, rows=25000)
-            results = filter(lambda r: "_part_" not in r["fullId"], results)  # ignore parts
-            model_ids = list([result["fullId"] for result in results])
-            if len(model_ids) == 0:
-                print(f'Cannot find object matching query "{query}" with filter "{fq}"')
-            if "dimensions" in object_spec:
-                dim_sorted_models = self.__model_db.sort_by_dim(model_ids, object_spec.dimensions)
-                total = sum(object_spec.dimensions) ** 2
-                trunc_sorted = [m for m in dim_sorted_models if m["dim_se"] < self.size_threshold * total]
-                if len(trunc_sorted) > 0:
-                    model_id = random.choice(trunc_sorted)["fullId"]
-                else:
-                    print()
-                    print("-----NONE FOUND-----")
-                    print()
-                    model_id = dim_sorted_models[0]["fullId"]
-            else:
-                model_id = random.choice(model_ids)
-        else:
-            print(f"Unsupported object_spec.type={object_spec.type}", file=sys.stderr)
-        return model_id
 
     # find position that is statically supported by reference_object
     def _sample_position_on(self, simscene: SimScene, reference_object_id: str):
@@ -253,7 +201,11 @@ class ObjectPlacer:
         return position
 
     def try_add(
-        self, scene_state: JSONDict, object_spec: ObjectSpec, placement_spec: PlacementSpec, max_tries: int = 10
+        self,
+        scene: Scene,
+        object_instance: ModelInstance,
+        placement_spec: PlacementSpec,
+        attempts: Optional[int] = None,
     ) -> Scene:
         """Try to add object to scene. If placement_spec.allow_collisions is True, checks if object placement conflicts
         with existing objects and will retry up to max_tries if a collision is detected.
@@ -264,40 +216,41 @@ class ObjectPlacer:
         :param max_tries: maximum number of tries to place object
         :return: scene after adding object
         """
-        scene = Scene.from_json(scene_state)
 
-        model_id = self._resolve_object_spec_to_model_id(scene, object_spec, placement_spec)
-        model_instance = ModelInstance(model_id=model_id)
-        added_model_instance = scene.add(model_instance, clone=True)
-        added = [added_model_instance]
+        if attempts is None:
+            attempts = self.max_tries
 
-        metadata = self.__model_db.get_metadata(model_id)
-        placement = self._resolve_placement_spec(placement_spec, scene, added_model_instance)
-        added_model_instance.transform.set_translation(placement.position)
+        # Create copy of object and create proposed placement. Note that the placement is only "random" if the object
+        # is being placed relative to another, else there is no reason to try more than once.
+        object_proposal = copy.deepcopy(object_instance)
+        object_proposal.id = scene.get_next_id()
+        object_proposal.parent_id = object_instance.id
+
+        placement = self._resolve_placement_spec(placement_spec, scene, object_proposal)
+        object_proposal.transform.set_translation(placement.position)
         rotation = Transform.get_alignment_quaternion(
-            metadata.up, metadata.front, placement.up or scene.up, placement.front or scene.front
+            object_proposal.up, object_proposal.front, placement.up or scene.up, placement.front or scene.front
         )
-        added_model_instance.transform.set_rotation(rotation)
+        object_proposal.transform.set_rotation(rotation)
 
-        if not placement_spec.get("allow_collisions"):
+        if not self.allow_collisions:
             ignore_object_ids = []
             if placement.ref_object is not None:
                 ignore_object_ids.append(placement.ref_object.id)
-            contacts = self.check_object_contacts(scene, added_model_instance.id, ignore_object_ids)
-            tries = 1
-            while len(contacts) > 0 and tries <= max_tries:
-                print(f"has collisions {len(contacts)}, try different placement {tries}/{max_tries}")
-                placement = self._resolve_placement_spec(placement_spec, scene, added_model_instance)
-                added_model_instance.transform.set_translation(placement.position)
-                if placement.ref_object is not None:
-                    ignore_object_ids[0] = placement.ref_object.id
-                contacts = self.check_object_contacts(scene, added_model_instance.id, ignore_object_ids)
-                tries += 1
-            if len(contacts):
-                scene.collisions = [k for k in contacts.keys()]
+            contacts = self.check_object_contacts(scene, object_proposal.id, ignore_object_ids)
+            if len(contacts) > 0:
+                if attempts > 1:
+                    return self.place(scene, object_instance, placement_spec, attempts - 1)
+                else:
+                    logging.warning("Object {} could not be placed without collisions.", object_instance.id)
+                    return None
 
-        scene.modifications.extend([{"type": "added", "object": a.to_json()} for a in added])
-        return scene
+        # add to scene
+        scene.add(object_proposal, clone=False)
+
+        # TODO: do we need to add a modification to the scene?
+        # scene.modifications.extend([{"type": "added", "object": a.to_json()} for a in added])
+        return object_proposal
 
     def check_object_contacts(
         self, scene: Scene, object_id: str, ignore_object_ids: Optional[list[str]] = None

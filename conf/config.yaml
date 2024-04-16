@@ -6,19 +6,36 @@ scene_builder:
   arch_db:
     metadata: .data/datasets/structured3d/structured3d.rooms.csv
     path: "${base_url}/${rlsd_basepath}/arch/{scene_id}.arch.json"
+  scene_db:
+    path: "${base_dir}/fpsb/scenes/cluttered/scenestate"
   model_db:
-    source: "fpModel"
+    source: "fpModel"  # this is ONLY the source for retrieving models from solr
     mesh_dir: "${base_dir}/hssd-hab/objects"
     collision_mesh_dir: "${base_dir}/hssd-hab/objects"
+    generation:  # TODO: make a separate configuration for this
+      output_dir: "/project/3dlg-hcvc/text2scene/generated/shape/models"
+      metadata_file: "/project/3dlg-hcvc/text2scene/generated/shape/model_info.csv" 
+      guidance_scale: 15.0
+      batch_size: 1
     size_threshold: 0.25
     defaults:
       up: [0, 1, 0]
       front: [0, 0, 1]
+    threed_future_db:
+      datasets:
+        bedroom: .data/datasets/threed_future/threed_future_model_bedroom.json
+        diningroom: .data/datasets/threed_future/threed_future_model_diningroom.json
+        livingroom: .data/datasets/threed_future/threed_future_model_livingroom.json
+      use_object_class: true
+      use_object_size: false
+    default_object_gen_method: "retrieve"
+    default_object_retrieve_type: "category"
   solr_url: "https://aspis.cmpt.sfu.ca/scene-toolkit-three/solr"
 
 defaults:
   - _self_
   - layout_generator@layout: layout_mapping
+  - scene_parser@parser: parser_mapping
 
 hydra:
   # disable changing of cwd as it interferes with flask auto-restart

@@ -1,0 +1,12 @@
+default_model: LLM
+config:
+  RoomType:
+    load_by_spec: false
+  LLM:
+    load_by_spec: false
+    config: llm.yaml
+  InstructScene:
+    load_by_spec: true
+    bedroom: instructscene_bedroom_sg_diffusion_vq_objfeat.yaml
+    diningroom: instructscene_diningroom_sg_diffusion_vq_objfeat.yaml
+    livingroom: instructscene_livingroom_sg_diffusion_vq_objfeat.yaml

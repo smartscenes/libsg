@@ -1,17 +1,21 @@
 import csv
 import glob
+import json
 import os
 import random
 import sys
-from typing import Optional
+from dataclasses import dataclass, field
+from functools import cached_property
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
 import pysolr
 import requests
 from easydict import EasyDict
+from omegaconf import DictConfig
 
-from libsg.scene_types import JSONDict
+from libsg.scene_types import JSONDict, ObjectSpec
 
 
 class AssetGroup:
@@ -161,3 +165,164 @@ class AssetDb:
                 m["dim_se"] = np.sum((np.asarray(dims) - np.asarray(m["dims"])) ** 2)
         metadata = sorted(metadata, key=lambda m: m["dim_se"])
         return metadata
+
+
+@dataclass
+class ThreedFutureAsset:
+    """Implementation based on the ThreedFutureModel class of the DiffuScene codebase."""
+
+    model_uid: str
+    model_jid: str
+    model_info: dict[str, Any]
+    position: list[float]
+    rotation: list[float]
+    scale: list[float]
+    path_to_models: str
+    up: list[float] = field(default_factory=lambda: [0, 1, 0])
+    front: list[float] = field(default_factory=lambda: [0, 0, 1])
+
+    @property
+    def raw_model_path(self):
+        return os.path.join(self.path_to_models, self.model_jid, "raw_model.obj")
+
+    # add normalized point cloud of raw_model
+    @property
+    def raw_model_norm_pc_path(self):
+        return os.path.join(self.path_to_models, self.model_jid, "raw_model_norm_pc.npz")
+
+    @property
+    def raw_model_norm_pc_lat_path(self):
+        return os.path.join(self.path_to_models, self.model_jid, "raw_model_norm_pc_lat32.npz")
+
+    @property
+    def raw_model_norm_pc_lat32_path(self):
+        return os.path.join(self.path_to_models, self.model_jid, "raw_model_norm_pc_lat32.npz")
+
+    @property
+    def texture_image_path(self):
+        return os.path.join(self.path_to_models, self.model_jid, "texture.png")
+
+    @property
+    def path_to_bbox_vertices(self):
+        return os.path.join(self.path_to_models, self.model_jid, "bbox_vertices.npy")
+
+    # add normalized point cloud of raw_model
+    def raw_model_norm_pc(self):
+        points = np.load(self.raw_model_norm_pc_path)["points"].astype(np.float32)
+        return points
+
+    def raw_model_norm_pc_lat(self):
+        latent = np.load(self.raw_model_norm_pc_lat_path)["latent"].astype(np.float32)
+        return latent
+
+    def raw_model_norm_pc_lat32(self):
+        latent = np.load(self.raw_model_norm_pc_lat32_path)["latent"].astype(np.float32)
+        return latent
+
+    def centroid(self, offset=[[0, 0, 0]]):
+        return self.corners(offset).mean(axis=0)
+
+    @cached_property
+    def size(self):
+        corners = self.corners()
+        return np.array(
+            [
+                np.sqrt(np.sum((corners[4] - corners[0]) ** 2)) / 2,
+                np.sqrt(np.sum((corners[2] - corners[0]) ** 2)) / 2,
+                np.sqrt(np.sum((corners[1] - corners[0]) ** 2)) / 2,
+            ]
+        )
+
+    def bottom_center(self, offset=[[0, 0, 0]]):
+        centroid = self.centroid(offset)
+        size = self.size
+        return np.array([centroid[0], centroid[1] - size[1], centroid[2]])
+
+    @cached_property
+    def bottom_size(self):
+        return self.size * [1, 2, 1]
+
+    @cached_property
+    def z_angle(self):
+        # See BaseThreedFutureModel._transform for the origin of the following
+        # code.
+        ref = [0, 0, 1]
+        axis = np.cross(ref, self.rotation[1:])
+        theta = np.arccos(np.dot(ref, self.rotation[1:])) * 2
+
+        if np.sum(axis) == 0 or np.isnan(theta):
+            return 0
+
+        assert np.dot(axis, [1, 0, 1]) == 0
+        assert 0 <= theta <= 2 * np.pi
+
+        if theta >= np.pi:
+            theta = theta - 2 * np.pi
+
+        return np.sign(axis[1]) * theta
+
+    @cached_property
+    def label(self):
+        return self.model_info["category"]
+
+    def corners(self, offset=[[0, 0, 0]]):
+        try:
+            bbox_vertices = np.load(self.path_to_bbox_vertices, mmap_mode="r")
+        except:
+            bbox_vertices = np.array(self.raw_model().bounding_box.vertices)
+            np.save(self.path_to_bbox_vertices, bbox_vertices)
+        c = self._transform(bbox_vertices)
+        return c + offset
+
+    def one_hot_label(self, all_labels):
+        return np.eye(len(all_labels))[self.int_label(all_labels)]
+
+    def int_label(self, all_labels):
+        return all_labels.index(self.label)
+
+
+class ThreedFutureAssetDB:
+    def __init__(self, cfg: DictConfig):
+        self.use_object_class = cfg.get("use_object_class", False)
+        self.use_object_size = cfg.get("use_object_size", False)
+        self.datasets = {}
+        for dataset_name, dataset_path in cfg.datasets.items():
+            with open(dataset_path, "r") as f:
+                dataset = json.load(f)
+
+            self.datasets[dataset_name] = {}
+            for obj in dataset:
+                self.datasets[dataset_name][obj["model_jid"]] = ThreedFutureAsset(**obj)
+
+    def get(self, id: str, *, dataset_name: str):
+        return self.datasets[dataset_name][id]
+
+    def retrieve_by_embedding(
+        self,
+        object_spec: ObjectSpec,
+        *,
+        dataset_name: str,
+    ) -> ThreedFutureAsset:
+        # TODO: we could use object class as well theoretically
+        model_ids = []
+        mses_feat = []
+        mses_size = []
+        for model_id, obj in self.datasets[dataset_name].items():
+            if not self.use_object_class or object_spec.description in obj.label:
+                model_ids.append(model_id)  # FIXME: pretty hacky whoops
+                if object_spec.embedding.shape[0] == 32:  # use objfeats_32
+                    mses_feat.append(np.sum((obj.raw_model_norm_pc_lat32() - object_spec.embedding) ** 2, axis=-1))
+                else:  # use objfeats
+                    mses_feat.append(np.sum((obj.raw_model_norm_pc_lat() - object_spec.embedding) ** 2, axis=-1))
+
+                if self.use_object_size and object_spec.dimensions is not None:
+                    mses_size.append(np.sum((obj.size - object_spec.dimensions) ** 2, axis=-1))
+
+        if not model_ids:
+            raise ValueError(f"No models found for the given object class: {object_spec.description}")
+
+        if mses_size:
+            ind = np.lexsort((mses_feat, mses_size))
+        else:
+            ind = np.argsort(mses_feat)
+        return self.datasets[dataset_name][model_ids[ind[0]]]  # TODO: add some randomness here, maybe within closest 5

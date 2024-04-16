@@ -12,13 +12,15 @@ from libsg.scene_types import JSONDict
 class ModelInstance:
     """Main definition of a model/object and its associated transform, related objects, and metadata"""
 
-    def __init__(self, model_id="", transform=Transform(), id="", parent_id=None):
+    def __init__(self, model_id="", transform=Transform(), id="", parent_id=None, up=None, front=None):
         self.id: str = id
         self.type: str = "ModelInstance"
         self.model_id: str = model_id
         self.parent_id: str = parent_id
         self.transform: Transform = copy.deepcopy(transform)
         self.metadata: dict = None
+        self.up = up
+        self.front = front
 
     def to_json(self, obj=None) -> JSONDict:
         obj = obj if obj else {}
@@ -101,7 +103,7 @@ class Scene:
     def model_instances(self):
         return self.model_instances_by_id.values()
 
-    def __getNextId(self):
+    def get_next_id(self):
         self.__maxId = self.__maxId + 1
         return f"{self.__maxId}"
 
