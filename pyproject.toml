@@ -31,7 +31,9 @@ dependencies = [
     "torchvision",
     "pytorch-fast-transformers",  # last, undeclared dep on torch
     "shap_e@git+https://github.com/openai/shap-e.git",
-    "openai==1.12.0"
+    "openai==1.12.0",
+    "diffusers",
+    "open_clip_torch"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
