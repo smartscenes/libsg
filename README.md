@@ -11,27 +11,33 @@ conf  # configuration files for libsg and models
 │   ├── layout_mapping.yaml  # defines general layout parameters and mapping from model and room type to configuration
 ├── config.yaml  # general libsg config
 libsg  # main code
-│   ├── api.py  # main internal API for handling requests within libsg. Interfaces use parsed spec classes.
-│   ├── app.py  # main external API for handling requests from stk or other sources. Interfaces expect JSON input and 
-                  apply minimal processing to convert into a form that the internal APIs can use.
-│   ├── scene_builder.py  # main class for generating or manipulating scenes, which calls all downstream modules
-│   ├── scene_parser.py  # main interface class for handling parsing of scene description
-│   ├── arch_builder.py  # code for retrieving or generating architecture of scene
-│   ├── object_placement.py  # main class for handling selection and placement of objects
-│   ├── io.py  # main class for defining export to scene formats
-│   ├── arch.py  # main class defining internal data representation for architectures
-│   ├── scene.py  # main class defining internal data representation for scenes
-│   ├── scene_types.py  # an array of helper classes to define object types and specification classes
-│   ├── model  # model code for text parsing, layout generation, shape generation, etc.
-│   │   ├── diffuscene  # model code for diffuscene
-│   │   ├── atiss.py  # model code for ATISS
-│   │   ├── layout.py  # main interface code for calling layout models, incl. pre- and post-processing of outputs
-│   │   ├── utils.py  # utility functions for models
-│   ├── assets.py  # database class for managing and retrieving assets
-│   ├── simscene.py  # class for handling simulation of a scene, e.g. for object placement collision detection
-│   ├── simulator.py  # class for base method simulation code
-│   ├── config.py  # code to load main configuration
-│   ├── geo.py  # auxiliary code to handle object transforms
+│   ├── api.py                    # main internal API for handling requests within libsg
+│   ├── app.py                    # main external API for handling requests from stk or other sources. Light wrapper
+                                    around api.py.
+│   ├── scene_builder.py          # main class for generating or manipulating scenes, which calls all downstream modules
+│   ├── scene_parser.py           # main interface class for handling parsing of scene description
+│   ├── arch_builder.py           # code for retrieving or generating architecture of scene
+│   ├── object_placement.py       # main class for handling selection and placement of objects
+│   ├── io.py                     # main class for defining export to scene formats
+│   ├── arch.py                   # main class defining internal data representation for architectures
+│   ├── scene.py                  # main class defining internal data representation for scenes
+│   ├── scene_types.py            # an array of helper classes to define object types and specification classes
+│   ├── model                     # model code for text parsing, layout generation, shape generation, etc.
+│   │   ├── atiss.py              # model code for ATISS
+│   │   ├── diffuscene            # model code for DiffuScene
+│   │   ├── instructscene         # model code for InstructScene
+│   │   ├── sg_parser             # code for scene graph parsing
+│   │   │   ├── base.py           # base class for scene graph (SG) parsing
+│   │   │   ├── instructscene.py  # SG parsing based on InstructScene method
+│   │   │   ├── llm_sg_parser.py  # SG parsing based on LLM
+│   │   │   ├── room_type.py      # SG parsing for simple room type lookup
+│   │   ├── layout.py             # main interface code for calling layout models, incl. pre- and post-processing of outputs
+│   │   ├── utils.py              # utility functions for models
+│   ├── assets.py                 # database class for managing and retrieving assets
+│   ├── simscene.py               # class for handling simulation of a scene, e.g. for object placement collision detection
+│   ├── simulator.py              # class for base method simulation code
+│   ├── config.py                 # code to load main configuration
+│   ├── geo.py                    # auxiliary code to handle object transforms
 ```
 
 ## Data setup
@@ -95,9 +101,12 @@ curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -
 Current supported scene formats include STK and HAB.
 
 You can additionally pass configuration options to the API to customize the backend generation of the scene:
-* `sceneInference.layoutModel` - specifies the model to use for layout generation (`ATISS` or `DiffuScene`)
+* `sceneInference.parserModel` - specifies the model to use for scene graph parsing (`InstructScene`, `LLM`, `RoomType`)
+* `sceneInference.layoutModel` - specifies the model to use for layout generation (`ATISS`, `DiffuScene`, `InstructScene`)
 * `sceneInference.passTextToLayout` - if True, the code will attempt to pass the raw text input to the model. Currently
-  only applicable to DiffuScene.
+  only applicable to `DiffuScene`. `ATISS` does not condition on text, and `InstructScene` uses the text by default currently.
+* `sceneInference.object.genMethod` - specify generation method for objects (`generate`, `retrieve`)
+* `sceneInference.object.retrieveType` - specify retrieval method for objects (`category`, `embedding`)
 
 For instance, to specify in the request that you would like to generate scenes using DiffuScene with the raw text input, 
 run
