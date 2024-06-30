@@ -35,6 +35,6 @@ def build_parser_model(scene_spec: SceneSpec, model_name: str, config: DictConfi
     if model_config_path:
         model_config = compose(os.path.join("scene_parser", model_config_path))
     else:
-        model_config = OmegaConf.create({})
+        model_config = OmegaConf.create({"scene_parser": {}})
 
     return getattr(this, model_name)(model_config.scene_parser)

@@ -148,35 +148,33 @@ class Architecture:
                 for hole in element.get("holes", []):
                     opening_min = hole["box"]["min"]
                     opening_max = hole["box"]["max"]
-                    width = opening_max[0] - opening_min[0]
-                    mid = (opening_min[0] + (width / 2)) / elem.width
-                    height = opening_max[1] - opening_min[1]
-                    elevation = opening_min[1] + height / 2
+                    w = opening_max[0] - opening_min[0]
+                    m = (opening_min[0] + (w / 2)) / elem.width
+                    h = opening_max[1] - opening_min[1]
+                    elev = opening_min[1] + h / 2
                     if hole["type"].lower() == "window":
-                        self.openings.append(
-                            Window(
-                                id=hole["id"],
-                                parent=elem,
-                                mid=mid,
-                                height=height,
-                                width=width,
-                                elevation=elevation,
-                            )
+                        opening = Window(
+                            id=hole["id"],
+                            parent=elem,
+                            mid=m,
+                            height=h,
+                            width=w,
+                            elevation=elev,
                         )
+                        elem.openings.append(opening)  # Add opening to Wall instance
                     elif hole["type"].lower() == "door":
-                        self.openings.append(
-                            Door(
-                                id=hole["id"],
-                                parent=elem,
-                                mid=mid,
-                                height=height,
-                                width=width,
-                                elevation=elevation,
-                            )
+                        opening = Door(
+                            id=hole["id"],
+                            parent=elem,
+                            mid=m,
+                            height=h,
+                            width=w,
+                            elevation=elev,
                         )
+                        elem.openings.append(opening)  # Add opening to Wall instance
                     else:
                         raise ValueError(f"Unsupported hole type: {hole['type']}")
-
+        
             case "Floor":
                 for i in range(len(element["materials"])):
                     element["materials"][i]["diffuse"] = "#929898"
@@ -400,7 +398,6 @@ class Architecture:
 
     def to_json(self) -> JSONDict:
         """Convert architecture to JSON form."""
-        # TODO: need to add back in openings
         return {
             "version": self.version,
             "up": self.up,
@@ -410,6 +407,7 @@ class Architecture:
             "defaults": self.defaults,
             "id": self.id,
             "elements": [elem.to_json() for elem in self.elements] if self.is_typed else self.elements,
+            "holes": [elem.to_json() for elem in self.openings], 
             "regions": [elem.to_json() for elem in self.rooms],
             "materials": self.materials,
             "textures": self.textures,
@@ -426,7 +424,7 @@ class Architecture:
         arch.unit = obj["scaleToMeters"]
         arch._rooms = {region["id"]: Room.from_json(region) for region in obj.get("regions", [])}
 
-        arch.add_elements(obj["elements"])
+        arch.add_elements(obj["elements"])  # included openings
         arch.materials = obj.get("materials", [])
         arch.textures = obj.get("textures", [])
         arch.images = obj.get("images", [])

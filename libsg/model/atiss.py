@@ -4,12 +4,20 @@
 # Andreas Geiger, Sanja Fidler
 
 
+import logging
 import numpy as np
 import torch
 import torch.nn as nn
 
-from fast_transformers.builders import TransformerEncoderBuilder
-from fast_transformers.masking import LengthMask
+try:
+    from fast_transformers.builders import TransformerEncoderBuilder
+    from fast_transformers.masking import LengthMask
+except ImportError:
+    logging.error(
+        "Could not import pytorch-fast-transformers. The pipeline will still run, but ATISS will not be available."
+    )
+    TransformerEncoderBuilder = None
+    LengthMask = None
 from torchvision import models
 from torch.nn import functional as F
 from torch.nn.parameter import Parameter

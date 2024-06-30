@@ -412,6 +412,7 @@ class Wall(ArchElement):
         self.depth: float = depth  # thickness of wall
         self.sides: list = sides  # material for each wall side
         self.room_id: str = room_id
+        self.openings: list[Opening] = []
 
     @property
     def width(self) -> float:
@@ -497,6 +498,23 @@ class Wall(ArchElement):
 
     def to_json(self) -> JSONDict:
         """Get JSON form of Wall object"""
+        holes = []
+        for opening in self.openings:
+            if isinstance(opening, Window):
+                hole_type = "Window"
+            elif isinstance(opening, Door):
+                hole_type = "Door"
+            else:
+                continue
+            hole = {
+                "id": opening.id,
+                "type": hole_type,
+                "box": {
+                    "min": [opening.mid * self.width - opening.width / 2, opening.elevation - opening.height / 2],
+                    "max": [opening.mid * self.width + opening.width / 2, opening.elevation + opening.height / 2],
+                },
+            }
+            holes.append(hole)
         return {
             "id": self.id,
             "type": self.type,
@@ -505,6 +523,7 @@ class Wall(ArchElement):
             "height": self.height,
             "depth": self.depth,
             "materials": self.sides,
+            "holes": holes,
         }
 
     @classmethod
@@ -597,6 +616,13 @@ class Opening(ArchElement):
 
     parent: ArchElement  # arch element associated with this opening
 
+    def to_json(self) -> JSONDict:
+        """Convert Opening object to JSON format"""
+        return {
+            "id": self.id,
+            "type": self.__class__.__name__,
+            "parent": self.parent.id,
+        }
 
 @dataclass
 class WallOpening(Opening):
@@ -616,12 +642,32 @@ class Window(WallOpening):
     """Class for windows in walls"""
 
     type: str = "Window"
+    def to_json(self) -> JSONDict:
+        """Convert Window object to JSON format"""
+        json_dict = super().to_json()
+        json_dict.update({
+            "mid": self.mid,
+            "width": self.width,
+            "height": self.height,
+            "elevation": self.elevation,
+        })
+        return json_dict
 
 
 class Door(WallOpening):
     """Class for doors in walls"""
 
     type: str = "Door"
+    def to_json(self) -> JSONDict:
+        """Convert Door object to JSON format"""
+        json_dict = super().to_json()
+        json_dict.update({
+            "mid": self.mid,
+            "width": self.width,
+            "height": self.height,
+            "elevation": self.elevation,
+        })
+        return json_dict
 
 
 class Room(ArchElement):
@@ -829,6 +875,7 @@ class ObjectSpec:
     wnsynsetkey: Optional[str] = None
     dimensions: Optional[list[float]] = None
     embedding: Optional[np.ndarray] = None
+    source: Optional[str] = None
 
     @classmethod
     def is_arch(cls, object_spec) -> bool:

@@ -70,6 +70,9 @@ Examples of JSON payloads to below endpoints
 
 from typing import Any, Optional
 
+from libsg.assets import AssetDb
+from libsg.object_builder import ObjectBuilder
+from libsg.scene import ModelInstance
 from libsg.scene_types import (
     JSONDict,
     SceneState,
@@ -127,8 +130,18 @@ def object_move(scene_state: SceneState, object_spec: ObjectSpec, move_spec: Mov
 
 
 # @app.route('/object/retrieve')
-def object_retrieve(object_spec: ObjectSpec) -> SceneState:
-    raise NotImplementedError
+def object_retrieve(object_spec: ObjectSpec, max_retrieve: int = 1, constraints: str = "") -> list[ModelInstance]:
+    base_solr_url = cfg.scene_builder.solr_url
+    model_db = AssetDb("model", cfg.scene_builder.get("model_db"), solr_url=f"{base_solr_url}/models3d")
+    object_builder = ObjectBuilder(model_db, cfg.scene_builder.model_db)
+    return object_builder.retrieve(object_spec, max_retrieve=max_retrieve, constraints=constraints)
+
+
+# @app.route('/object/retrieve')
+def embedding_retrieve(object_spec: ObjectSpec) -> list[float]:
+    object_builder = ObjectBuilder(None, cfg.scene_builder.model_db)
+    embedding_tensor = object_builder.get_text_embedding(object_spec.description)
+    return embedding_tensor.cpu().tolist()
 
 
 # @app.route('/object/generate')

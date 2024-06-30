@@ -27,6 +27,7 @@ from shap_e.rendering.torch_mesh import TorchMesh
 from shap_e.util.collections import AttrDict
 
 from libsg.assets import AssetDb, ThreedFutureAssetDB
+from libsg.model.instructscene.clip_encoders import CLIPTextEncoderWrapper
 from libsg.scene import ModelInstance
 from libsg.scene_types import ObjectSpec, PlacementSpec, Point3D
 
@@ -49,9 +50,11 @@ class ObjectBuilder:
 
     DEFAULT_UP = [0, 0, 1]
     DEFAULT_FRONT = [0, 1, 0]
+    DEFAULT_ROWS = 25000
     LAST_ARCH = None
 
     def __init__(self, model_db: AssetDb, cfg: DictConfig):
+        self.cfg = cfg
         self.__model_db = model_db
         # TODO: maybe we want source to be potentially different from asset to asset, so instead we could specify this
         # in the object spec or just return it based on the selected model (probably better esp. if we are combining
@@ -62,14 +65,25 @@ class ObjectBuilder:
         self.size_threshold = cfg.get("size_threshold", 0.5)
 
         # object generation parameters
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            print("Using CUDA")
+            self.device = torch.device("cuda")
+        else:
+            print("Using CPU")
+            self.device = torch.device("cpu")
+
         self.batch_size = cfg.generation.get("batch_size", 1)
         self.guidance_scale = cfg.generation.get("guidance_scale", 15.0)
         self.gen_output_dir = cfg.generation.get("output_dir")
         self.gen_metadata = cfg.generation.get("metadata_file")
 
+        self.ret_embedding_field = cfg.retrieval.embedding_field
+        self.ret_top_k = cfg.retrieval.top_k
+
         if self.gen_output_dir:
             os.makedirs(self.gen_output_dir, exist_ok=True)
+
+        self._text_encoder = None
 
     @cached_property
     def generation_text_model(self):
@@ -83,15 +97,20 @@ class ObjectBuilder:
     def generation_diffusion_model(self):
         return diffusion_from_config(load_config("diffusion"))
 
+    @property
+    def text_encoder(self):
+        return CLIPTextEncoderWrapper.get_model(name=self.cfg.text_encoder, device=self.device)
+
     @staticmethod
     def get_source(gen_method, retrieve_type):
         if gen_method == "generate":
             return "t2sModel"
         else:
-            if retrieve_type == "category":
-                return "fpModel"
-            elif retrieve_type == "embedding":
-                return "3dfModel"
+            return "fpModel"
+            # if retrieve_type == "category":
+            #     return "fpModel"
+            # elif retrieve_type == "embedding":
+            #     return "3dfModel"
 
     def generate(self, object_spec: ObjectSpec, placement_spec: PlacementSpec, **kwargs) -> ModelInstance:
         assert self.gen_output_dir is not None, "Generation output directory must be set to generate objects"
@@ -187,7 +206,15 @@ class ObjectBuilder:
         pass
 
     def retrieve(
-        self, object_spec: ObjectSpec, placement_spec: PlacementSpec, *, dataset_name: Optional[str] = None, **kwargs
+        self,
+        object_spec: ObjectSpec,
+        placement_spec: Optional[PlacementSpec] = None,
+        *,
+        dataset_name: Optional[str] = None,  # originally for 3D-FUTURE
+        max_retrieve: int = 0,
+        constraints: str = "",
+        filter_parts: bool = True,
+        **kwargs,
     ) -> ModelInstance:
         """
         Retrieve object from database.
@@ -195,59 +222,89 @@ class ObjectBuilder:
         FIXME: in practice would prefer not to pass the dataset_name, but needed for diffuscene 3D-FUTURE assets for
         now.
         """
+
+        def parse_response(selected_metadata):
+            if max_retrieve > 0:
+                results = []
+                for entry in selected_metadata:
+                    model_id = entry["fullId"]
+                    up = entry["up"]
+                    front = entry["front"]
+                    results.append(ModelInstance(model_id=model_id, up=up, front=front))
+                return results
+            else:
+                model_id = selected_metadata["fullId"]
+                up = selected_metadata["up"]
+                front = selected_metadata["front"]
+                return ModelInstance(model_id=model_id, up=up, front=front)
+
         match object_spec.type:
             case "model_id":
                 model_id = object_spec.description
-                model_instance = ModelInstance(model_id=model_id)
+                return ModelInstance(model_id=model_id)
 
             case "category":  # use solr to search based on wnsynsetkey
                 query = object_spec.description if object_spec.description else "*"
-                fq = self._build_object_query(object_spec, placement_spec)
-                results = self.__model_db.search(query, fl="fullId", fq=fq, rows=25000)
+                if constraints:  # TODO: check if this is correct
+                    query = f"{query} AND {constraints}"
+                fq = self._build_object_query(object_spec, placement_spec, constraints=constraints)
+                results = self.__model_db.search(query, fl="fullId", fq=fq, rows=ObjectBuilder.DEFAULT_ROWS)
 
                 # ignore parts
-                results = filter(lambda r: "_part_" not in r["fullId"], results)
+                if filter_parts:
+                    results = filter(lambda r: "_part_" not in r["fullId"], results)
 
                 model_ids = list([result["fullId"] for result in results])
                 if len(model_ids) == 0:
                     raise ValueError(f'Cannot find object matching query "{query}" with filter "{fq}"')
 
-                # filter by size
-                if object_spec.dimensions:
-                    dim_sorted_models = self.__model_db.sort_by_dim(model_ids, object_spec.dimensions)
-                    total = sum(object_spec.dimensions) ** 2
-                    trunc_sorted = [m for m in dim_sorted_models if m["dim_se"] < self.size_threshold * total]
-                    if len(trunc_sorted) > 0:
-                        selected_metadata = random.choice(trunc_sorted)
-                    else:
-                        logging.warning(
-                            f"No models found within size threshold for object category {object_spec.wnsynsetkey} with size {object_spec.dimensions}",
-                        )
-                        selected_metadata = dim_sorted_models[0]
-                else:
-                    model_id = random.choice(model_ids)
-                    selected_metadata = self.__model_db.get_metadata_for_ids([model_id])[0]
-
-                model_id = selected_metadata["fullId"]
-                up = selected_metadata["up"]
-                front = selected_metadata["front"]
-                model_instance = ModelInstance(model_id=model_id, up=up, front=front)
+                selected_metadata = self._filter_by_size(model_ids, object_spec, max_retrieve=max_retrieve)
+                return parse_response(selected_metadata)
 
             case "embedding":
                 if object_spec.embedding is None:
-                    raise ValueError(
-                        f"Embedding must be provided for embedding search, but received instead: {object_spec}"
-                    )
-                model = self.__threed_future_db.retrieve_by_embedding(object_spec, dataset_name=dataset_name)
-                model_instance = ModelInstance(model_id=f"3dfModel.{model.model_jid}", up=model.up, front=model.front)
+                    desc = object_spec.description
+                    object_spec.embedding = self.get_text_embedding(desc)
+                if constraints:
+                    constraints = " ".join([f"preFilter={c}" for c in constraints.split("AND")])
+                else:
+                    constraints = 'preFilter=""'
+                query = f"{{!knn f={self.ret_embedding_field} topK={max(max_retrieve, self.ret_top_k)} {constraints}}}"
+                fq = self._build_object_query(object_spec, placement_spec)
+                embedding = object_spec.embedding.tolist()
+                results = self.__model_db.search(
+                    query + str(embedding),
+                    fl="fullId",
+                    fq=fq,
+                    rows=ObjectBuilder.DEFAULT_ROWS,
+                )
 
-        return model_instance
+                # ignore parts
+                if filter_parts:
+                    results = filter(lambda r: "_part_" not in r["fullId"], results)
+
+                model_ids = list([result["fullId"] for result in results])
+                if len(model_ids) == 0:
+                    raise ValueError(f'Cannot find object matching query "{query}" with filter "{fq}"')
+
+                selected_metadata = self._filter_by_size(model_ids, object_spec, max_retrieve=max_retrieve)
+                return parse_response(selected_metadata)
+
+                # deprecated code to use internal 3D-FUTURE assets
+                # model = self.__threed_future_db.retrieve_by_embedding(object_spec, dataset_name=dataset_name)
+                # model_instance = ModelInstance(model_id=f"3dfModel.{model.model_jid}", up=model.up, front=model.front)
+
+    def get_text_embedding(self, text: str) -> torch.Tensor:
+        return self.text_encoder(text)[0]
 
     # construct object solr query constraints (source, synset, support etc.)
-    def _build_object_query(self, object_spec: ObjectSpec, placement_spec: Optional[PlacementSpec] = None):
+    def _build_object_query(
+        self, object_spec: ObjectSpec, placement_spec: Optional[PlacementSpec] = None, constraints: str = ""
+    ):
         """Construct query constraints for solr query into object database"""
 
-        fq = f'+source:{self.__model_db.config["source"]}'
+        source = object_spec.source if object_spec.source else self.__model_db.config["source"]
+        fq = f"+source:{source}"
         if object_spec.wnsynsetkey:
             fq += f" +wnhypersynsetkeys:{object_spec.wnsynsetkey}"
         if not placement_spec:
@@ -261,4 +318,37 @@ class ObjectBuilder:
                     fq = fq + " +support:top"
                 case _:
                     fq = fq + " -support:top -support:vertical"
+        if constraints:
+            fq += f" {constraints}"
         return fq
+
+    def _filter_by_size(self, model_ids, object_spec: ObjectSpec, max_retrieve: int = 0):
+        # filter by size
+        if object_spec.dimensions:
+            dim_sorted_models = self.__model_db.sort_by_dim(model_ids, object_spec.dimensions)
+            total = sum(object_spec.dimensions) ** 2
+            trunc_sorted = [m for m in dim_sorted_models if m["dim_se"] < self.size_threshold * total]
+            if len(trunc_sorted) > 0:
+                if max_retrieve > 0:
+                    selected_metadata = np.random.choice(
+                        trunc_sorted, size=min(max_retrieve, len(trunc_sorted)), replace=False
+                    )
+                else:
+                    selected_metadata = random.choice(trunc_sorted)
+            else:
+                logging.warning(
+                    f"No models found within size threshold for object category {object_spec.wnsynsetkey} with size {object_spec.dimensions}",
+                )
+                if max_retrieve > 0:
+                    selected_metadata = dim_sorted_models[:max_retrieve]
+                else:
+                    selected_metadata = dim_sorted_models[0]
+        else:
+            if max_retrieve > 0:
+                model_ids = np.random.choice(model_ids, size=min(max_retrieve, len(model_ids)), replace=False)
+                selected_metadata = self.__model_db.get_metadata_for_ids(model_ids)
+            else:
+                model_ids = [random.choice(model_ids)]
+                selected_metadata = self.__model_db.get_metadata_for_ids(model_ids)[0]
+
+        return selected_metadata

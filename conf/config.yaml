@@ -17,6 +17,9 @@ scene_builder:
       metadata_file: "/project/3dlg-hcvc/text2scene/generated/shape/model_info.csv" 
       guidance_scale: 15.0
       batch_size: 1
+    retrieval:
+      embedding_field: f_openshape_p_1280
+      top_k: 10
     size_threshold: 0.25
     defaults:
       up: [0, 1, 0]
@@ -30,6 +33,7 @@ scene_builder:
       use_object_size: false
     default_object_gen_method: "retrieve"
     default_object_retrieve_type: "category"
+    text_encoder: "ViT-bigG-14"
   solr_url: "https://aspis.cmpt.sfu.ca/scene-toolkit-three/solr"
 
 defaults:

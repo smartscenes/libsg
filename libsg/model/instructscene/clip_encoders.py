@@ -89,6 +89,19 @@ class OpenShapeTextEncoder(nn.Module):
             return text_encoder_output
 
 
+class CLIPTextEncoderWrapper:
+    model = None
+
+    @classmethod
+    def get_model(cls, name="ViT-g-14", pretrained="laion2b_s39b_b160k", max_length=77, device="cuda"):
+        if cls.model is None:
+            print("Instantiating CLIP text encoder...")
+            cls.model = OpenShapeTextEncoder(name=name, pretrained=pretrained, max_length=max_length, device=device)
+        else:
+            print("Loading cached CLIP text encoder...")
+        return cls.model
+
+
 class CLIPImageEncoder(nn.Module):
     def __init__(self, name="openai/clip-vit-base-patch32", device="cpu"):
         super().__init__()

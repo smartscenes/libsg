@@ -19,6 +19,8 @@ from libsg import __version__
 from libsg.api import (
     object_add as object_add_api,
     object_remove as object_remove_api,
+    object_retrieve as object_retrieve_api,
+    embedding_retrieve as embedding_retrieve_api,
     scene_generate as scene_generate_api,
     scene_retrieve as scene_retrieve_api,
 )
@@ -27,6 +29,7 @@ from libsg.scene_types import (
     SceneState,
     SceneSpec,
     SceneType,
+    ObjectSpec,
 )
 
 load_dotenv()
@@ -219,6 +222,74 @@ def object_remove() -> JSONDict:
     object_spec = remove_json["object_spec"]
     new_scene_state = object_remove_api(scene_state, object_spec)
     return scenestate_json_wrapper(new_scene_state)
+
+
+@app.route("/object/retrieve", methods=["POST"])
+def retrieve_object() -> JSONDict:
+    """Retrieve objects from the solr database using a variety of query methods.
+
+    Supported query methods include the following:
+    - model_id: retrieve object by model ID
+    - category: retrieve objects by wnsynset category
+    - embedding: retrieve objects by embedding similarity by providing a text description
+
+    In each case, the 'type' parameter should specify the query method, and the 'description' parameter should specify
+    the input (e.g. model_id, category name, or description).
+
+    Additional parameters:
+    - `max_results`: specify a maximum number of results to retrieve (default: 10).
+    - `constraints`: specify additional solr constraints to filter results
+
+    # TODO: add optional support for embeddings, dimensions
+
+    :return: list of model_ids of retrieved objects
+    """
+
+    # parse raw input
+    retrieve_json = request.json
+    retrieve_type = retrieve_json["type"]
+    desc = retrieve_json.get("input")
+    wnsynsetkey = retrieve_json.get("wnsynsetkey")
+    source = retrieve_json.get("source")
+    max_retrieve = retrieve_json.get("max_results", 10)
+    constraints = retrieve_json.get("constraints", "")
+
+    # create object spec
+    object_spec = ObjectSpec(type=retrieve_type, description=desc, wnsynsetkey=wnsynsetkey, source=source)
+
+    models = object_retrieve_api(object_spec, max_retrieve=max_retrieve, constraints=constraints)
+    return [model.model_id for model in models]
+
+
+@app.route("/embedding/retrieve", methods=["POST"])
+def retrieve_embedding() -> JSONDict:
+    """Retrieve embedding for corresponding text input.
+
+    Supported query methods include the following:
+    - model_id: retrieve object by model ID
+    - category: retrieve objects by wnsynset category
+    - embedding: retrieve objects by embedding similarity by providing a text description
+
+    In each case, the 'type' parameter should specify the query method, and the 'description' parameter should specify
+    the input (e.g. model_id, category name, or description).
+
+    Additional parameters:
+    - `max_results`: specify a maximum number of results to retrieve (default: 10).
+    - `constraints`: specify additional solr constraints to filter results
+
+    # TODO: add optional support for embeddings, dimensions
+
+    :return: list of model_ids of retrieved objects
+    """
+
+    # parse raw input
+    retrieve_json = request.json
+    desc = retrieve_json["input"]
+
+    # create object spec
+    object_spec = ObjectSpec(type="embedding", description=desc)
+
+    return embedding_retrieve_api(object_spec)
 
 
 # TODO: Make this be more informative

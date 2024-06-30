@@ -56,6 +56,7 @@ used during retrieval to check object collision detection during placement.
 
 ## Local development
 
+Requires `CUDA 12.1` for Shap-e GPU acceleraction \
 Use `conda` to setup the enviroment needed for running the flask app.
 
 ```bash
@@ -69,6 +70,11 @@ Alternatively, if you want to use `libsg` with other modules, install `libsg` lo
 pip install --upgrade build
 python -m build
 pip install -e .
+```
+
+Afterwards, run
+```bash
+python3 -c "import nltk; nltk.download('cmudict')"
 ```
 
 ## Usage

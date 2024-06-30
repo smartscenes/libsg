@@ -140,7 +140,7 @@ class InstructSceneParser(BaseSceneParser):
         for i, obj_name in enumerate(object_names):
             scene_graph["objects"].append(
                 {
-                    "id": i + 1,  # 1 indexed
+                    "id": i,
                     "name": obj_name,
                     "attributes": [],
                     "feature": objfeat_vq_indices[0, i] if objfeat_vq_indices is not None else None,

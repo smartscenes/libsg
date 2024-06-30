@@ -19,7 +19,7 @@ from diffusers.training_utils import EMAModel
 from libsg.model.atiss import atiss_network
 from libsg.model.diffuscene import build_network
 from libsg.model.instructscene import ObjectFeatureVQVAE, load_checkpoints, Sg2ScDiffusion
-from libsg.model.instructscene.clip_encoders import OpenShapeTextEncoder
+from libsg.model.instructscene.clip_encoders import CLIPTextEncoderWrapper
 from libsg.scene_types import SceneLayoutSpec
 from libsg.model.utils import descale, ObjectClassNotFoundError, EdgeRelationshipNotFoundError
 
@@ -413,7 +413,7 @@ class InstructScene(LayoutBase):
         self.vqvae_model.eval()
 
         # Initialize the model
-        self.text_encoder = OpenShapeTextEncoder(config.network.text_encoder, device=self.device)
+        self.text_encoder = CLIPTextEncoderWrapper.get_model(config.network.text_encoder, device=self.device)
         self.sg_to_scene_model = self._load_sg_to_scene_model(config)
 
     def _load_sg_to_scene_model(self, config):
