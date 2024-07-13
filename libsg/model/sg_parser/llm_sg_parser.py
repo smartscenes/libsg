@@ -7,7 +7,7 @@ from openai import OpenAI
 from libsg.scene_types import SceneSpec, SceneType
 from .base import BaseSceneParser
 
-
+MODEL = "gpt-4o"
 OV_SCENE_GRAPH_PROMPT = """Please follow the examples in the Visual Genome dataset and generate a scene graph that best describes the following text:
 "{}"
 Return the output in a JSON format according to the following format:
@@ -33,8 +33,7 @@ The object and relationship IDs should start with 0 and increment. Every subject
 
 If a number of objects are specified, please include each object in the count as a separate node. For example, if the text specifies "two chairs", include two separate nodes for the chairs.
 """
-
-THREEDFRONT_SCENE_GRAPH_PROMPT = """Please follow the examples in the Visual Genome dataset and generate a scene graph that best describes the following text:
+THREEDFRONT_SCENE_GRAPH_PROMPT = """Please follow the examples in the Visual Genome dataset and generate a scene graph for a room that best describes the following text:
 "{}"
 Return the output in a JSON format according to the following format:
 {{
@@ -56,13 +55,18 @@ Return the output in a JSON format according to the following format:
   ]
 }}
 
+Requirements:
 The object and relationship IDs should start with 0 and increment. Every subject_id and target_id in relationships should correspond to an existing object ID.
-
-If the room type is bedroom, the object name must be one of "armchair", "bookshelf", "cabinet", "ceiling lamp", "chair", "children cabinet", "coffee table", "desk", "double bed", "dressing chair", "dressing table", "kids bed", "nightstand", "pendant lamp", "shelf", "single bed", "sofa", "stool", "table", "tv stand", or "wardrobe".
-
-If the room type is diningroom or livingroom, the object name must be one of "armchair", "bookcase", "cabinet", "ceiling lamp", "chaise longue sofa", "chinese chair", "coffee table", "console table", "corner/side table", "desk", "dining chair", "dining table", "l-shaped sofa", "lazy sofa", "lounge chair", "loveseat sofa", "multi-seat sofa", "pendant lamp", "round end table", "shelf", "stool", "tv stand", "wardrobe", or "wine cabinet".
+Ensure to include common essential objects for the room type, even if not explicitly mentioned in the input text. 
+The scene graph should have a minimum of 5 objects for any room type, if not explicitly mentioned.
 
 If a number of objects are specified, please include each object in the count as a separate node. For example, if the text specifies "two chairs", include two separate nodes for the chairs.
+
+For each relationship between objects, include the reflexive relationship as well. For example:
+- If object A is left of object B, also include that object B is right of object A.
+- If object C is above object D, also include that object D is below object C.
+
+Ensure to include all possible reflexive relationships for a complete scene graph.
 """
 
 
@@ -95,7 +99,7 @@ class LLMSceneParser(BaseSceneParser):
         inp = self.prompt.format(scene_spec.input)
 
         response = client.chat.completions.create(
-            model="gpt-4-0125-preview",
+            model=MODEL,
             messages=[
                 {
                     "role": "system",

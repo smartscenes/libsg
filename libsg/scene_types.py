@@ -6,6 +6,7 @@ elements of a scene, and specifications for API requests and aspects of scenes.
 """
 
 import inspect
+import logging
 import math
 import random
 from dataclasses import dataclass, field
@@ -624,6 +625,7 @@ class Opening(ArchElement):
             "parent": self.parent.id,
         }
 
+
 @dataclass
 class WallOpening(Opening):
     """Base class for openings in walls"""
@@ -642,15 +644,18 @@ class Window(WallOpening):
     """Class for windows in walls"""
 
     type: str = "Window"
+
     def to_json(self) -> JSONDict:
         """Convert Window object to JSON format"""
         json_dict = super().to_json()
-        json_dict.update({
-            "mid": self.mid,
-            "width": self.width,
-            "height": self.height,
-            "elevation": self.elevation,
-        })
+        json_dict.update(
+            {
+                "mid": self.mid,
+                "width": self.width,
+                "height": self.height,
+                "elevation": self.elevation,
+            }
+        )
         return json_dict
 
 
@@ -658,15 +663,18 @@ class Door(WallOpening):
     """Class for doors in walls"""
 
     type: str = "Door"
+
     def to_json(self) -> JSONDict:
         """Convert Door object to JSON format"""
         json_dict = super().to_json()
-        json_dict.update({
-            "mid": self.mid,
-            "width": self.width,
-            "height": self.height,
-            "elevation": self.elevation,
-        })
+        json_dict.update(
+            {
+                "mid": self.mid,
+                "width": self.width,
+                "height": self.height,
+                "elevation": self.elevation,
+            }
+        )
         return json_dict
 
 
@@ -760,11 +768,11 @@ class SceneSpec:
 class SceneLayoutSpec:
     """Specification of scene layout"""
 
-    from libsg.arch import Architecture  # FIXME: needed to avoid circular import :(
+    # from libsg.arch import Architecture  # FIXME: needed to avoid circular import :(
 
     type: SceneType
     input: str
-    arch: Optional[Architecture] = None
+    arch: Any = None
     raw: Optional[str] = None
     graph: Optional[JSONDict] = None
 
@@ -787,10 +795,10 @@ class ObjectTemplateInstance:
 class SceneLayout:
     """Scene layout definition"""
 
-    from libsg.arch import Architecture  # FIXME: needed to avoid circular import :(
+    # from libsg.arch import Architecture  # FIXME: needed to avoid circular import :(
 
     objects: list[ObjectTemplateInstance]
-    arch: Optional[Architecture] = None
+    arch: Any = None
     room_type: Optional[str] = None
 
     NEAR_FLOOR_HEIGHT = 0.05
@@ -851,11 +859,13 @@ class SceneLayout:
 
     def print_layout(self):
         """Print layout to console"""
-        print("LAYOUT:")
+        out = "LAYOUT:\n"
         for object_template in self.objects:
-            print(
-                f" * {object_template.label}, at position {object_template.position} with orientation {object_template.orientation} and dimensions {object_template.dimensions}"
+            out += (
+                f" * {object_template.label}, at position {object_template.position} with orientation "
+                f"{object_template.orientation} and dimensions {object_template.dimensions}\n"
             )
+        logging.debug(out)
 
 
 class SceneModifySpec:
@@ -919,3 +929,101 @@ class RemoveSpec:
         self.object
         self.remove_children  # Whether to remove support children
         self.adjust_scene  # whether to adjust other objects in scene
+
+
+class InvalidSceneGraphError(Exception):
+    pass
+
+
+@dataclass
+class Object:
+    id: int
+    name: str
+    attributes: list[str]
+    relationships: list["Relationship"] = field(default_factory=list)
+    feature: Optional[np.ndarray] = None
+
+    def __eq__(self, __other: object) -> bool:
+        return (
+            isinstance(__other, Object)
+            and self.id == __other.id
+            and self.name == __other.name
+            and set(self.attributes) == set(__other.attributes)
+        )
+
+
+@dataclass
+class Relationship:
+    id: int
+    type: str
+    subject: Object
+    target: Object
+    embedding: Optional[np.ndarray] = None
+
+    def get_end(self, obj: Object) -> Object:
+        if obj != self.subject and obj != self.target:
+            raise ValueError(f"Object {obj} is not part of the relationship {self}")
+        return self.target if self.subject == obj else self.subject
+
+
+@dataclass
+class SceneGraph:
+    id: Optional[str]
+    objects: list[Object]
+    relationships: list[Relationship]
+
+    def validate(
+        self, allowed_objects: Optional[list[str]] = None, allowed_relationships: Optional[list[str]] = None
+    ) -> bool:
+        # check object names
+        for obj in self.objects:
+            if allowed_objects is not None and obj.name not in allowed_objects:
+                raise InvalidSceneGraphError(f"Found invalid object name: {obj.name}")
+            if not isinstance(obj.id, int):
+                raise InvalidSceneGraphError(f"Found object_id which is not an integer: {obj.id}")
+
+        object_ids = set([obj.id for obj in self.objects])
+
+        # check relationships
+        for rel in self.relationships:
+            if allowed_relationships is not None and rel.type not in allowed_relationships:
+                raise InvalidSceneGraphError(f"Found invalid relationship type: {rel.type}")
+            if rel.subject.id not in object_ids:
+                raise InvalidSceneGraphError(f"Found subject_id which does not correspond to a real object: {rel}")
+            if rel.target.id not in object_ids:
+                raise InvalidSceneGraphError(f"Found target_id which does not correspond to a real object: {rel}")
+
+        return True
+
+    @classmethod
+    def from_json(cls, data: dict, id: Optional[str] = None) -> Self:
+        objects = {obj["id"]: Object(**obj) for obj in data["objects"]}
+        relationships = []
+        for rel in data["relationships"]:
+            try:
+                subject = objects[rel["subject_id"]]
+            except KeyError:
+                raise InvalidSceneGraphError(
+                    f"Found subject_id which does not correspond to a real object: {rel}, object_ids={objects.keys()}"
+                )
+            try:
+                target = objects[rel["target_id"]]
+            except KeyError:
+                raise InvalidSceneGraphError(
+                    f"Found target_id which does not correspond to a real object: {rel}, object_ids={objects.keys()}"
+                )
+            relationships.append(
+                Relationship(
+                    id=rel.get("id"),
+                    type=rel["type"],
+                    subject=subject,
+                    target=target,
+                )
+            )
+            subject.relationships.append(relationships[-1])
+            target.relationships.append(relationships[-1])
+        return cls(
+            id=id,
+            objects=list(objects.values()),
+            relationships=relationships,
+        )

@@ -96,7 +96,6 @@ class Scene:
         self.arch = None
         self.model_instances_by_id: dict[str, ModelInstance] = {}
         self.modifications = []
-        self.collisions = []
         self.__maxId = 0
 
     @property

@@ -1,3 +1,5 @@
+import json
+import logging
 import os
 from pprint import pprint
 
@@ -35,8 +37,9 @@ class SceneParser:
         """
         parser_model = build_parser_model(scene_spec, self.model_name, self.cfg)
         parsed_spec = parser_model.parse(scene_spec)
-        print("Scene Graph:")
-        pprint(parsed_spec.scene_graph)
+        logging.debug(f"Scene Graph:")
+        if logging.DEBUG >= logging.root.level:
+            pprint(parsed_spec.scene_graph)
 
         # sg visualization
         if self.visualize_sg:

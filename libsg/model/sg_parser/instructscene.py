@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Optional
 
 import torch
@@ -56,7 +57,7 @@ class InstructSceneParser(BaseSceneParser):
 
         # Evaluate with the EMA parameters if specified
         if ema_states is not None:
-            print(f"Copy EMA parameters to the model\n")
+            logging.debug("Copy EMA parameters to the model")
             ema_states.copy_to(text_to_sg_model.parameters())
         text_to_sg_model.eval()
         return text_to_sg_model

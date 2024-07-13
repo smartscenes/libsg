@@ -6,6 +6,7 @@ Classes to define unified wrapper interface for each layout model.
 TODO: This could eventually be split out into multiple files if we add more than 2 model architectures.
 """
 
+import logging
 import pickle
 from typing import Any
 
@@ -404,7 +405,7 @@ class InstructScene(LayoutBase):
         self.reverse_predicates = config.data.reverse_predicates
 
         # instantiate model
-        print("Load pretrained VQ-VAE")
+        logging.debug("Load pretrained VQ-VAE")
         with open(config.network.objfeat_bounds, "rb") as f:
             kwargs = pickle.load(f)
         self.vqvae_model = ObjectFeatureVQVAE("openshape_vitg14", "gumbel", **kwargs)
@@ -443,7 +444,7 @@ class InstructScene(LayoutBase):
 
         # Evaluate with the EMA parameters if specified
         if ema_states is not None:
-            print(f"Copy EMA parameters to the model")
+            logging.debug("Copy EMA parameters to the model")
             ema_states.copy_to(model.parameters())
         model.eval()
         return model
@@ -456,12 +457,22 @@ class InstructScene(LayoutBase):
         :return: tensor of mask of room, with 1 representing valid placement and 0 otherwise
         """
         scene_graph = layout_spec.graph
+        room_type = scene_graph["room_type"]
 
         # parse objects from scene graph
-        try:
-            objs = [InstructScene.OBJECT_LOOKUP[scene_graph["room_type"]][ob["name"]] for ob in scene_graph["objects"]]
-        except KeyError as e:
-            raise ObjectClassNotFoundError(f"Tried to retrieve class index for object but could not parse: {e}")
+        objs = []
+        for ob in scene_graph["objects"]:
+            try:
+                objs.append(InstructScene.OBJECT_LOOKUP[room_type][ob["name"].lower()])
+            except KeyError:
+                # If exact match fails, try to find a close match
+                print(f"Using close match for object: {ob['name']}")
+                close_matches = [key for key in InstructScene.OBJECT_LOOKUP[room_type].keys() if ob["name"].lower() in key.lower()]
+                if close_matches:
+                    objs.append(InstructScene.OBJECT_LOOKUP[room_type][close_matches[0]])
+                else:
+                    raise ObjectClassNotFoundError(f"Could not find a match for object: {ob['name']}")
+
         while len(objs) < self.max_length:  # pad to max length
             objs.append(len(self.raw_classes))
         objs = torch.tensor(objs)  # (max_length,)

@@ -1,3 +1,4 @@
+import logging
 from typing import *
 from PIL.Image import Image as PILImage
 
@@ -95,10 +96,10 @@ class CLIPTextEncoderWrapper:
     @classmethod
     def get_model(cls, name="ViT-g-14", pretrained="laion2b_s39b_b160k", max_length=77, device="cuda"):
         if cls.model is None:
-            print("Instantiating CLIP text encoder...")
+            logging.debug("Instantiating CLIP text encoder...")
             cls.model = OpenShapeTextEncoder(name=name, pretrained=pretrained, max_length=max_length, device=device)
         else:
-            print("Loading cached CLIP text encoder...")
+            logging.debug("Loading cached CLIP text encoder...")
         return cls.model
 
 

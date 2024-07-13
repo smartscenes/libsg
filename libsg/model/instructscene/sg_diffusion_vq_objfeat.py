@@ -180,7 +180,7 @@ class SgObjfeatVQDiffusion(nn.Module):
 
             start_step = self.num_timesteps
             if skip_step == 0:
-                for diffusion_index in tqdm(range(start_step - 1, -1, -1), desc="Generating graphs", ncols=125):
+                for diffusion_index in tqdm(range(start_step - 1, -1, -1), desc="Generating graphs", ncols=125, leave=False):
                     t = torch.full((batch_size,), diffusion_index, device=device, dtype=torch.long)
                     log_z_x, log_z_e, log_z_o = self.p_sample(
                         log_z_x, log_z_e, log_z_o, t, text_last_hidden_state, text_embeds, cfg_scale, truncation_rate
@@ -190,7 +190,7 @@ class SgObjfeatVQDiffusion(nn.Module):
                 diffusion_list = list(range(start_step - 1, -1, -1 - skip_step))
                 if diffusion_list[-1] != 0:
                     diffusion_list.append(0)
-                for diffusion_index in tqdm(diffusion_list, desc="Generating graphs", ncols=125):
+                for diffusion_index in tqdm(diffusion_list, desc="Generating graphs", ncols=125, leave=False):
                     t = torch.full((batch_size,), diffusion_index, device=device, dtype=torch.long)
                     log_x_recon, log_e_recon, log_o_recon = self.predict_start(
                         log_z_x, log_z_e, log_z_o, t, text_last_hidden_state, text_embeds, cfg_scale, truncation_rate

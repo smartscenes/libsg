@@ -5,6 +5,7 @@ This code is intended to support generation and retrieval of the scene architect
 """
 
 import json
+import logging
 import random
 from typing import Optional
 
@@ -57,16 +58,16 @@ class ArchBuilder:
         :return: architecture of room in scene, including walls, floors, and ceilings.
         """
         arch_url = self.__arch_db.get(description)  # assumes description is ID of scene
-        print(f"Retrieving architecture from {arch_url}")
+        logging.debug(f"Retrieving architecture from {arch_url}")
         try:
             resp = self.session.get(arch_url)
             arch_json = json.loads(resp.text)
             Architecture.LAST_ARCH = arch_json
         except requests.exceptions.SSLError as e:
-            print(f"[ERROR] {e}")
+            logging.error(str(e))
             arch_json = Architecture.LAST_ARCH
         arch = Architecture.from_json(arch_json)
-        print(f"Loaded architecture: {arch.id}")
+        logging.debug(f"Loaded architecture: {arch.id}")
 
         arch.set_axes(Architecture.DEFAULT_UP, Architecture.DEFAULT_FRONT, invert=True, rotate=np.pi)
 
@@ -92,7 +93,7 @@ class ArchBuilder:
             if large_rooms:
                 room = random.choice(large_rooms)
                 arch = arch.filter_by_rooms(room.id)
-                print(f"Selected room: {room.id}")
+                logging.debug(f"Selected room: {room.id}")
                 arch.center_architecture()
                 return arch
 

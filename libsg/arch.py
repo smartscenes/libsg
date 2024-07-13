@@ -174,7 +174,7 @@ class Architecture:
                         elem.openings.append(opening)  # Add opening to Wall instance
                     else:
                         raise ValueError(f"Unsupported hole type: {hole['type']}")
-        
+
             case "Floor":
                 for i in range(len(element["materials"])):
                     element["materials"][i]["diffuse"] = "#929898"
@@ -296,7 +296,7 @@ class Architecture:
                     np.min(wall_bounds_rescaled[:, 1]) : np.max(wall_bounds_rescaled[:, 1]) + 1,
                     np.min(wall_bounds_rescaled[:, 0]) : np.max(wall_bounds_rescaled[:, 0]) + 1,
                 ] = 0.0
-        
+
         open_indices = np.where(room_mask == 1)
         min_pixels = np.array([np.min(open_indices[3]), np.min(open_indices[2])])
         max_pixels = np.array([np.max(open_indices[3]), np.max(open_indices[2])])
@@ -407,7 +407,7 @@ class Architecture:
             "defaults": self.defaults,
             "id": self.id,
             "elements": [elem.to_json() for elem in self.elements] if self.is_typed else self.elements,
-            "holes": [elem.to_json() for elem in self.openings], 
+            "holes": [elem.to_json() for elem in self.openings],
             "regions": [elem.to_json() for elem in self.rooms],
             "materials": self.materials,
             "textures": self.textures,

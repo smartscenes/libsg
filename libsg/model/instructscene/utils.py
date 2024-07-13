@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any, Optional
 
@@ -30,7 +31,7 @@ def load_checkpoints(
         print(f"Checkpoint file {checkpoint_path} not found, starting from scratch\n")
         return -1
 
-    print(f"Load checkpoint from {checkpoint_path}\n")
+    logging.debug(f"Load checkpoint from {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
     model.load_state_dict(checkpoint["model"])

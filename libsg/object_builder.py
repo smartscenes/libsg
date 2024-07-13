@@ -66,10 +66,10 @@ class ObjectBuilder:
 
         # object generation parameters
         if torch.cuda.is_available():
-            print("Using CUDA")
+            logging.debug("Using CUDA")
             self.device = torch.device("cuda")
         else:
-            print("Using CPU")
+            logging.debug("Using CPU")
             self.device = torch.device("cpu")
 
         self.batch_size = cfg.generation.get("batch_size", 1)
