@@ -1,6 +1,6 @@
 base_dir: "/datasets/internal/hssd"
-base_url: "https://aspis.cmpt.sfu.ca"
-rlsd_basepath: "projects/rlsd/data/structured3d-fp2cg"
+base_url: ???  # base url for scene builder API requests
+rlsd_basepath: ???  # base path to structured3d architecture files
 
 scene_builder:
   arch_db:
@@ -13,8 +13,8 @@ scene_builder:
     mesh_dir: "${base_dir}/hssd-hab/objects"
     collision_mesh_dir: "${base_dir}/hssd-hab/objects"
     generation:  # TODO: make a separate configuration for this
-      output_dir: "/project/3dlg-hcvc/text2scene/generated/shape/models"
-      metadata_file: "/project/3dlg-hcvc/text2scene/generated/shape/model_info.csv" 
+      output_dir: ???  # directory to output generated models
+      metadata_file: ???  # path to csv file at which to maintain metadata of generated models
       guidance_scale: 15.0
       batch_size: 1
     retrieval:
@@ -34,7 +34,7 @@ scene_builder:
     default_object_gen_method: "retrieve"
     default_object_retrieve_type: "category"
     text_encoder: "ViT-bigG-14"
-  solr_url: "https://aspis.cmpt.sfu.ca/scene-toolkit-three/solr"
+  solr_url: ???  # url for solr database API queries
 
 defaults:
   - _self_

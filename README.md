@@ -2,6 +2,8 @@
 
 `libsg` is a backend library for scene generation, intended to be used with the scene toolkit frontend.
 
+To setup your own instance of `libsg`, please follow the data and configuration setup sections below.
+
 ## Package Contents
 
 The folder structure breaks down as follows (grouped in accordance with function):
@@ -53,6 +55,16 @@ Modify the `arch_db` parameters to link to the CSV for scene lookup.
 
 3. (Optional) Clone the [hssd-hab repository](https://huggingface.co/datasets/hssd/hssd-hab) into `base_dir` to get the GLB objects 
 used during retrieval to check object collision detection during placement.
+
+## Configuration Setup
+
+Several of the paths in the configuration files ([conf/config.yaml] and [conf/evaluation.yaml]) must be specified before
+use. You will need to specify all those defined as `???`, including
+* `base_url`
+* `rlsd_basepath`
+* `scene_builder.model_db.generation.output_dir`
+* `scene_builder.model_db.generation.metadata_file`
+* `scene_builder.solr_url`
 
 ## Local development
 
