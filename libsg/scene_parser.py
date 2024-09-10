@@ -26,6 +26,7 @@ class SceneParser:
     def __init__(self, cfg: DictConfig, **kwargs) -> None:
         self.model_name = kwargs.get("sceneInference.parserModel", cfg.default_model)  # legacy format
         self.visualize_sg = kwargs.get("sceneInference.parser.visualize", False)
+        self.kwargs = kwargs
         self.cfg = cfg
 
     def parse(self, scene_spec: SceneSpec) -> SceneSpec:
@@ -35,9 +36,9 @@ class SceneParser:
         :raises ValueError: scene spec type or room type not supported for parsing
         :return: structured scene specification
         """
-        parser_model = build_parser_model(scene_spec, self.model_name, self.cfg)
+        parser_model = build_parser_model(scene_spec, self.model_name, self.cfg, **self.kwargs)
         parsed_spec = parser_model.parse(scene_spec)
-        logging.debug(f"Scene Graph:")
+        logging.debug("Scene Graph:")
         if logging.DEBUG >= logging.root.level:
             pprint(parsed_spec.scene_graph)
 

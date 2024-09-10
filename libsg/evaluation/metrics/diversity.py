@@ -28,11 +28,14 @@ class ObjectCategoryDistribution(EvaluationBase):
 
     def log(self):
         print("Object Category Distribution:")
+        aggregate = {}
         if self.frequencies:
             for obj_class, freq in self.frequencies.items():
                 print(f"  {obj_class}: {freq / self.num_scenes:.2f}")
+                aggregate[obj_class] = freq / self.num_scenes
         else:
             print("  <No objects found>")
+        return aggregate
 
 
 class ObjectCountDistribution(EvaluationBase):
@@ -61,6 +64,7 @@ class ObjectCountDistribution(EvaluationBase):
 
     def log(self):
         print("Object Count Distribution:")
+        aggregate = {}
         if self.frequencies:
             for obj_class, freqs in self.frequencies.items():
                 freq_arr = np.zeros((self.num_scenes,))
@@ -68,8 +72,10 @@ class ObjectCountDistribution(EvaluationBase):
                 mean = np.mean(freq_arr)
                 std = np.std(freq_arr)
                 print(f"  {obj_class}: {mean:.2f} ({std:.2f})")
+                aggregate[obj_class] = {"mean": mean, "std": std}
         else:
             print("  <No objects found>")
+        return aggregate
 
 
 class SceneGraphDistribution(EvaluationBase):
@@ -93,8 +99,11 @@ class SceneGraphDistribution(EvaluationBase):
 
     def log(self):
         print("Scene Graph Relationship Distribution:")
+        aggregate = {}
         if self.frequencies:
             for rel, freq in self.frequencies.items():
                 print(f"  {rel}: {freq / self.num_scenes:.2f}")
+                aggregate[str(rel)] = freq / self.num_scenes
         else:
             print("  <No relationships found>")
+        return aggregate

@@ -247,7 +247,7 @@ class ObjectPlacer:
 
         # add to scene
         scene.add(object_proposal, clone=False)
-
+    
         # TODO: do we need to add a modification to the scene?
         # scene.modifications.extend([{"type": "added", "object": a.to_json()} for a in added])
         return object_proposal

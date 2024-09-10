@@ -39,6 +39,10 @@ class Transform:
         self._s = copy.deepcopy(s)
         self.__update_matrix()
 
+    @property
+    def mat4(self):
+        return self._mat4
+
     def __update_matrix(self):
         self._mat4 = Transform.rts_to_mat4(self._r, self._t, self._s)
 

@@ -50,40 +50,29 @@ hydra:
   output_subdir: null
 
 data: ".data/evaluation/test_prompts_example.csv"
-output: ".data/evaluation/cache2"
-metrics_output: "${output}/metrics.json"
+# output_dir: "/project/3dlg-hcvc/text2scene/www/comparison"
+output_dir: ".data/evaluation/generated_scenes"
+output_prompt_file: "test_prompts.json"
+semantic_index: ".data/evaluation/semantic_color_index.csv"
+skip_existing_stk: false
+skip_existing_render: false
+use_semantic_render: false
 
 methods:
-  sceneInference.parserMethod: InstructScene  # RoomType, LLM, InstructScene
-  sceneInference.layoutMethod: InstructScene  # ATISS, DiffuScene, InstructScene
-  sceneInference.assetSources: fpModel
-
-metrics:
-  - _target_: libsg.evaluation.metrics.ObjectLevelCollisionRate
-    object_dir_mapping: ${scene_builder.model_db.collision_mesh_dir}
-    solr_url: ${scene_builder.solr_url}/models3d
-  - _target_: libsg.evaluation.metrics.SceneLevelCollisionRate
-    object_dir_mapping: ${scene_builder.model_db.collision_mesh_dir}
-  - _target_: libsg.evaluation.metrics.ObjectLevelInBoundsRate
-    object_dir_mapping: ${scene_builder.model_db.collision_mesh_dir}
-    solr_url: ${scene_builder.solr_url}/models3d
-    wall_depth: 0.0
-  - _target_: libsg.evaluation.metrics.SceneLevelInBoundsRate
-    object_dir_mapping: ${scene_builder.model_db.collision_mesh_dir}
-    solr_url: ${scene_builder.solr_url}/models3d
-    wall_depth: 0.0
-  - _target_: libsg.evaluation.metrics.WalkableMetric
-    robot_width: 0.3
-    object_dir_mapping: ${scene_builder.model_db.collision_mesh_dir}
-    
-diversity_metrics:
-  - _target_: libsg.evaluation.metrics.ObjectCategoryDistribution
-  - _target_: libsg.evaluation.metrics.ObjectCountDistribution
-  - _target_: libsg.evaluation.metrics.SceneGraphDistribution
-
-gpu_monitor_interval: 0.5
-use_existing: false
-render_scenes: true
-use_semantic_render: false
-semantic_index: ".data/evaluation/semantic_color_index.csv"
-verbose: false
+  - name: ATISS
+    params:
+      sceneInference.parserModel: RoomTypeLLM
+      sceneInference.layoutModel: ATISS
+  - name: DiffuScene
+    params:
+      sceneInference.parserModel: RoomTypeLLM
+      sceneInference.layoutModel: DiffuScene
+      sceneInference.passTextToLayout: "True"
+  - name: InstructScene
+    params:
+      sceneInference.parserModel: InstructScene
+      sceneInference.layoutModel: InstructScene
+  - name: LLM_InstructScene
+    params:
+      sceneInference.parserModel: LLM
+      sceneInference.layoutModel: InstructScene

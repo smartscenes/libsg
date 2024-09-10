@@ -22,6 +22,10 @@ class ModelInstance:
         self.up = up
         self.front = front
 
+    @property
+    def asset_source(self):
+        return self.model_id.partition(".")[0]
+
     def to_json(self, obj=None) -> JSONDict:
         obj = obj if obj else {}
         obj["modelId"] = self.model_id
@@ -88,12 +92,12 @@ class Scene:
 
     def __init__(self, id="", asset_source=None):
         self.id = id
-        self.asset_source = asset_source
+        self._asset_source = asset_source
         self.version = "scene@1.0.2"
         self.up = [0, 0, 1]
         self.front = [0, 1, 0]
         self.unit = 1
-        self.arch = None
+        self.arch: Architecture = None
         self.model_instances_by_id: dict[str, ModelInstance] = {}
         self.modifications = []
         self.__maxId = 0
@@ -101,6 +105,13 @@ class Scene:
     @property
     def model_instances(self):
         return self.model_instances_by_id.values()
+
+    @property
+    def asset_source(self):
+        if self._asset_source is None:
+            return list(set([mi.asset_source for mi in self.model_instances]))
+        else:
+            return self._asset_source
 
     def get_next_id(self):
         self.__maxId = self.__maxId + 1
@@ -198,7 +209,7 @@ class Scene:
 
         return self
 
-    def to_json(self, obj=None) -> JSONDict:
+    def to_json(self, obj=None, asset_source: list[str] | str = None) -> JSONDict:
         obj = obj if obj else {}
         obj["version"] = self.version
         obj["id"] = self.id
@@ -222,7 +233,7 @@ class Scene:
     def from_json(cls, obj) -> Self:
         scn = Scene()
         scn.id = obj["id"]
-        scn.asset_source = obj["assetSource"]
+        scn._asset_source = obj["assetSource"]
         scn.up = list(obj["up"])
         scn.front = list(obj["front"])
         scn.unit = float(obj["unit"])
@@ -235,7 +246,7 @@ class Scene:
         return scn
 
     @classmethod
-    def from_arch(cls, arch: Architecture, asset_source: str) -> Self:
+    def from_arch(cls, arch: Architecture) -> Self:
         """Generate a scene based on an architecture (i.e. without objects)
 
         :param arch: architecture to use in scene
@@ -244,7 +255,7 @@ class Scene:
         """
         scn = Scene()
         scn.id = str(arch.id)
-        scn.asset_source = asset_source
+        scn._asset_source = None
         scn.up = arch.up
         scn.front = arch.front
         scn.unit = float(arch.unit)

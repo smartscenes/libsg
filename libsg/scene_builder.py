@@ -21,6 +21,7 @@ from libsg.assets import AssetDb
 from libsg.object_builder import ObjectBuilder
 from libsg.object_placement import ObjectPlacer
 from libsg.scene_types import (
+    ArchSpec,
     BBox3D,
     JSONDict,
     SceneState,
@@ -68,18 +69,18 @@ class SceneBuilder:
 
     NEAR_FLOOR_HEIGHT = 0.05
 
-    def __init__(self, cfg: DictConfig, layout: DictConfig, **kwargs):
+    def __init__(self, cfg: DictConfig, arch: DictConfig, layout: DictConfig, **kwargs):
         """
         :param cfg: loaded config at conf/config.yaml:scene_builder
         :param layout: loaded config at conf/config.yaml:scene_builder.layout
         """
         self.layout_cfg = layout
         self.__base_solr_url = cfg.get("solr_url")
-        self.__arch_builder = ArchBuilder(cfg.get("arch_db"))
+        self.__arch_builder = ArchBuilder(cfg, arch)
         self.__scene_db = AssetDb("scene", cfg.get("scene_db"))
         self.__model_db = AssetDb("model", cfg.get("model_db"), solr_url=f"{self.__base_solr_url}/models3d")
         self.scene_exporter = SceneExporter()
-        self.__object_builder = ObjectBuilder(self.__model_db, cfg.get("model_db"))
+        self.__object_builder = ObjectBuilder(self.__model_db, cfg.get("model_db"), **kwargs)
         self.object_placer = ObjectPlacer(
             model_db=self.__model_db, size_threshold=cfg.model_db.get("size_threshold", 0.5)
         )
@@ -97,18 +98,41 @@ class SceneBuilder:
             "sceneInference.object.retrieveType", cfg.model_db.default_object_retrieve_type
         )
 
+        # architecture parameters
+        self.arch_method = kwargs.get("sceneInference.arch.genMethod", "retrieve")
+
     def modify(self, scene_state: JSONDict, description: str) -> JSONDict:
         raise NotImplementedError
 
     def generate(self, scene_spec: SceneSpec) -> JSONDict:
-        """Generate a scene based on scene specification.
+        """
+        Generate a complete 3D scene based on the given scene specification.
 
-        :param scene_spec: Specification of scene to generate
-        :return: JSON in specified format representing scene
+        This method orchestrates the entire scene generation process, including:
+        1. Generating or retrieving the room architecture
+        2. Creating a coarse layout of objects within the room
+        3. Generating or retrieving detailed 3D objects based on the layout
+        4. Composing the final scene
+
+        :param scene_spec: A SceneSpec object containing the specification for the scene to generate.
+                        This includes the scene type (e.g., "bedroom", "living room"), any specific
+                        requirements or constraints, and the desired output format.
+
+        :return: A JSON dictionary representing the complete generated scene. The structure of this
+                dictionary depends on the specified output format (e.g., HAB or STK), but generally
+                includes:
+                - Room architecture information (walls, floor, ceiling)
+                - List of objects with their 3D models, positions, orientations, and sizes
+                - Any additional metadata required by the output format
+
+        :raises ValueError: If the scene specification is invalid or unsupported.
         """
         # generate or retrieve architecture
-        # TODO: use input scene_spec instead of an arbitrary arch_spec
-        arch_spec = SceneSpec(type="id", input=None, format=scene_spec.format)
+        arch_spec = (
+            scene_spec.arch_spec
+            if scene_spec.arch_spec is not None
+            else ArchSpec(type="id", input=None, format=scene_spec.format)
+        )
         arch, scene, base_scene_aabb = self.generate_arch(arch_spec)
         base_scene_centroid = base_scene_aabb.centroid
 
@@ -118,7 +142,7 @@ class SceneBuilder:
         )
         if self.pass_text:
             scene_layout_spec.raw = scene_spec.raw
-        scene_layout = self.generate_layout(scene_layout_spec, base_scene_aabb)
+        scene_layout = self.generate_layout(scene_layout_spec)
 
         # generate or retrieve objects
         scene = self.generate_objects(scene, base_scene_centroid, scene_layout)
@@ -126,7 +150,7 @@ class SceneBuilder:
         # format scene
         return self.export_scene(scene, scene_spec.format)
 
-    def generate_arch(self, scene_spec: SceneSpec) -> tuple[Architecture, Scene, BBox3D]:
+    def generate_arch(self, arch_spec: ArchSpec) -> tuple[Architecture, Scene, BBox3D]:
         """Generate architecture for scene.
 
         The current implementation retrieves an architecture from Structured3D.
@@ -137,12 +161,8 @@ class SceneBuilder:
         scene, as calculated by the min/max AABB of all elements in the scene.
         """
         # load base scene and clear default layout objects
-        arch = self.__arch_builder.retrieve(
-            scene_spec.input, min_size=self.layout_cfg.min_room_size
-        )  # FIXME: this should be parametrized somehow based on the room type
-        base_scene = Scene.from_arch(
-            arch, asset_source=self.__object_builder.get_source(self.object_method, self.object_retrieve_type)
-        )
+        arch = getattr(self.__arch_builder, self.arch_method)(arch_spec, min_size=self.layout_cfg.min_room_size)
+        base_scene = Scene.from_arch(arch)
 
         # compute base scene AABB to transform object positions later
         with Simulator(mode="direct", verbose=False, use_y_up=False) as sim:
@@ -151,7 +171,7 @@ class SceneBuilder:
 
         return arch, base_scene, base_scene_aabb
 
-    def generate_layout(self, layout_spec: SceneLayoutSpec, base_scene_aabb: BBox3D) -> SceneLayout:
+    def generate_layout(self, layout_spec: SceneLayoutSpec) -> SceneLayout:
         """Generate coarse scene layout given specification of architecture and room type.
 
         :param layout_spec: specification for architecture and room type
@@ -262,7 +282,7 @@ class SceneBuilder:
             return scenestate
         else:
             raise ValueError(f"Scene specification type not supported for retrieval: {scene_spec.type}")
-
+    
     # def object_remove(self, scene_state: SceneState, object_spec: ObjectSpec) -> JSONDict:
     #     """Remove existing object from given scene.
 

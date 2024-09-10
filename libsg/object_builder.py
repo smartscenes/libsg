@@ -1,7 +1,7 @@
 """
 object_builder.py
 ---
-This code is intended to support generation and retrieval of scene objects.
+This module is responsible for generating and retrieving objects for scenes.
 """
 
 import copy
@@ -26,7 +26,7 @@ from shap_e.diffusion.gaussian_diffusion import diffusion_from_config
 from shap_e.rendering.torch_mesh import TorchMesh
 from shap_e.util.collections import AttrDict
 
-from libsg.assets import AssetDb, ThreedFutureAssetDB
+from libsg.assets import AssetDb
 from libsg.model.instructscene.clip_encoders import CLIPTextEncoderWrapper
 from libsg.scene import ModelInstance
 from libsg.scene_types import ObjectSpec, PlacementSpec, Point3D
@@ -53,13 +53,9 @@ class ObjectBuilder:
     DEFAULT_ROWS = 25000
     LAST_ARCH = None
 
-    def __init__(self, model_db: AssetDb, cfg: DictConfig):
+    def __init__(self, model_db: AssetDb, cfg: DictConfig, **kwargs):
         self.cfg = cfg
         self.__model_db = model_db
-        # TODO: maybe we want source to be potentially different from asset to asset, so instead we could specify this
-        # in the object spec or just return it based on the selected model (probably better esp. if we are combining
-        # multiple datasets).
-        self.__threed_future_db = ThreedFutureAssetDB(cfg.threed_future_db)
 
         # object retrieval parameters
         self.size_threshold = cfg.get("size_threshold", 0.5)
@@ -85,6 +81,16 @@ class ObjectBuilder:
 
         self._text_encoder = None
 
+        sources_raw = kwargs.get("sceneInference.assetSources")
+        if sources_raw:
+            self.sources = sources_raw.split(",")
+        else:
+            self.sources = None
+        use_wnsynset = kwargs.get("sceneInference.useCategory", "false").lower()
+        if use_wnsynset not in {"true", "false"}:
+            raise ValueError(f"Invalid value for sceneInference.useCategory: {use_wnsynset}")
+        self.use_wnsynset = use_wnsynset == "true"
+
     @cached_property
     def generation_text_model(self):
         return load_model("text300M", device=self.device)
@@ -107,12 +113,22 @@ class ObjectBuilder:
             return "t2sModel"
         else:
             return "fpModel"
-            # if retrieve_type == "category":
-            #     return "fpModel"
-            # elif retrieve_type == "embedding":
-            #     return "3dfModel"
 
     def generate(self, object_spec: ObjectSpec, placement_spec: PlacementSpec, **kwargs) -> ModelInstance:
+        """
+        Generate a new 3D object based on the given specifications.
+
+        Args:
+            object_spec (ObjectSpec): Specification of the object to generate.
+            placement_spec (PlacementSpec): Specification of where to place the object.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            ModelInstance: The generated 3D object.
+
+        Raises:
+            AssertionError: If the generation output directory is not set.
+        """
         assert self.gen_output_dir is not None, "Generation output directory must be set to generate objects"
 
         # TODO: move this out into a separate model file for generation
@@ -217,7 +233,22 @@ class ObjectBuilder:
         **kwargs,
     ) -> ModelInstance:
         """
-        Retrieve object from database.
+        Retrieve an object from the database based on the given specifications.
+
+        Args:
+            object_spec (ObjectSpec): Specification of the object to retrieve.
+            placement_spec (Optional[PlacementSpec]): Specification for object placement.
+            dataset_name (Optional[str]): Name of the dataset to retrieve from.
+            max_retrieve (int): Maximum number of objects to retrieve.
+            constraints (str): Additional constraints for retrieval.
+            filter_parts (bool): Whether to filter out object parts.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            ModelInstance: The retrieved object.
+
+        Raises:
+            ValueError: If no matching object is found.
 
         FIXME: in practice would prefer not to pass the dataset_name, but needed for diffuscene 3D-FUTURE assets for
         now.
@@ -303,9 +334,10 @@ class ObjectBuilder:
     ):
         """Construct query constraints for solr query into object database"""
 
-        source = object_spec.source if object_spec.source else self.__model_db.config["source"]
-        fq = f"+source:{source}"
-        if object_spec.wnsynsetkey:
+        fq = ""
+        if self.sources:
+            fq += "+(" + " OR ".join([f"source:{source}" for source in self.sources]) + ")"
+        if self.use_wnsynset and object_spec.wnsynsetkey:
             fq += f" +wnhypersynsetkeys:{object_spec.wnsynsetkey}"
         if not placement_spec:
             return fq

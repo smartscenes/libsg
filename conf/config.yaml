@@ -1,11 +1,11 @@
 base_dir: "/datasets/internal/hssd"
 base_url: ???  # base url for scene builder API requests
-rlsd_basepath: ???  # base path to structured3d architecture files
+structured3d_path: ???  # base path to structured3d architecture files
 
 scene_builder:
   arch_db:
     metadata: .data/datasets/structured3d/structured3d.rooms.csv
-    path: "${base_url}/${rlsd_basepath}/arch/{scene_id}.arch.json"
+    path: "${base_url}/${structured3d_path}/arch/{scene_id}.arch.json"
   scene_db:
     path: "${base_dir}/fpsb/scenes/cluttered/scenestate"
   model_db:
@@ -40,6 +40,7 @@ defaults:
   - _self_
   - layout_generator@layout: layout_mapping
   - scene_parser@parser: parser_mapping
+  - arch_generator@arch: arch_generator_mapping
 
 hydra:
   # disable changing of cwd as it interferes with flask auto-restart

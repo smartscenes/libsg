@@ -18,7 +18,7 @@ import torch
 from shapely import Polygon
 from shapely.geometry import MultiPoint
 
-from libsg.scene_types import ArchElement, Room, Opening, Wall, Floor, Ceiling, Window, Door, JSONDict
+from libsg.scene_types import ArchElement, Room, Opening, Wall, Floor, Ceiling, Window, Door, JSONDict, Point3D
 
 
 class Architecture:
@@ -297,7 +297,7 @@ class Architecture:
                     np.min(wall_bounds_rescaled[:, 0]) : np.max(wall_bounds_rescaled[:, 0]) + 1,
                 ] = 0.0
 
-        open_indices = np.where(room_mask == 1)
+        open_indices = torch.where(room_mask == 1)[0].cpu().numpy()
         min_pixels = np.array([np.min(open_indices[3]), np.min(open_indices[2])])
         max_pixels = np.array([np.max(open_indices[3]), np.max(open_indices[2])])
         print("pixel bounds", min_pixels, max_pixels)
@@ -364,6 +364,7 @@ class Architecture:
         arch.version = self.version
         arch.up = self.up
         arch.front = self.front
+        arch.defaults = self.defaults
         arch.unit = self.scale_to_meters
         arch._rooms = {room.id: room for room in self.rooms if room.id in room_ids}
 
@@ -414,6 +415,40 @@ class Architecture:
             "images": self.images,
         }
 
+    def get_floor_plan(self) -> tuple[list[Point3D], np.ndarray, str]:
+        floor_points = []
+        floor_elements = list(self.find_elements_by_type("Floor"))
+        for floor in floor_elements:
+            floor_points.extend([(point.x, point.y) for point in floor.points])
+        
+        # Create faces as triangles
+        floor_faces = []
+        for i in range(1, len(floor.points) - 1):
+            floor_faces.append([0, i, i+1])
+        floor_faces = np.array(floor_faces)
+        
+        return floor.points, floor_faces, floor.room_id
+    
+    def get_door_positions(self, room_id):
+        door_positions = []
+        for element in self.elements:
+            if isinstance(element, Wall) and element.room_id == room_id:
+                for opening in element.openings:
+                    if isinstance(opening, Door):
+                        # Get wall start and end points
+                        wall_start = np.array([element.points[0].x, element.points[0].y, element.points[0].z])
+                        
+                        wall_end = np.array([element.points[1].x, element.points[1].y, element.points[1].z])
+                        print("wall_start", "wall_end")
+                        print(wall_start, wall_end)
+                        # Calculate door position along the wall
+                        door_position = wall_start + (wall_end - wall_start) * opening.mid
+                        
+                        door_positions.append(door_position)
+
+        return np.array(door_positions) if door_positions else None
+
+    
     @classmethod
     def from_json(cls, obj: JSONDict) -> Self:
         """Return Architecture object based on JSON input."""
@@ -421,6 +456,8 @@ class Architecture:
         arch.version = obj["version"]
         arch.up = obj["up"]
         arch.front = obj["front"]
+        if "defaults" in obj:
+            arch.defaults = obj["defaults"]
         arch.unit = obj["scaleToMeters"]
         arch._rooms = {region["id"]: Room.from_json(region) for region in obj.get("regions", [])}
 

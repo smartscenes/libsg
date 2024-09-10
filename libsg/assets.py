@@ -107,8 +107,8 @@ class AssetDb:
         return [id if "." in id else f"{source}.{id}" for id in ids]
 
     def get_query_for_ids(self, ids: list[str]):
-        fullids = self._to_fullids(self.config["source"], ids)
-        return f'fullId:({" OR ".join(fullids)})'
+        # fullids = self._to_fullids(None, ids)
+        return f'fullId:({" OR ".join(ids)})'
 
     @staticmethod
     def _to_floats(s, default=None):

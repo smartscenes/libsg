@@ -6,6 +6,7 @@ external party, e.g. the frontend application, and thus handle any pre- or post-
 inputs/outputs into a form that the internal API can handle.
 """
 
+import logging
 import os
 import traceback
 
@@ -40,6 +41,11 @@ api = Api(
     version=__version__,
     title="Text-to-scene API",
     description="API for Text-to-scene generation application.",
+)
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt=r"%Y-%m-%d %H:%M:%S",
+    level=os.environ.get("LOG_LEVEL", "INFO"),
 )
 
 # define API specs

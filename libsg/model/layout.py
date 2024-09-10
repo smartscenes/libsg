@@ -60,6 +60,7 @@ class ATISS(LayoutBase):
         self.export_room_mask = config.export_room_mask
         self.model = atiss_network(config=config)
         self.model.eval()
+        self.device = config.get("device", "cpu")
 
     def prepare_inputs(self, layout_spec: SceneLayoutSpec) -> torch.FloatTensor:
         """
@@ -69,19 +70,19 @@ class ATISS(LayoutBase):
         :return: tensor of mask of room, with 1 representing valid placement and 0 otherwise
         """
         room_mask = layout_spec.arch.get_room_mask(
-            layout_size=self.room_layout_size, room_dims=self.room_dims, device="cpu"
+            layout_size=self.room_layout_size, room_dims=self.room_dims, device=self.device
         )
 
         # write room_mask to image for debugging
         if self.export_room_mask:
-            image = Image.fromarray((room_mask[0, 0].numpy() * 255).astype(np.uint8), "L")
+            image = Image.fromarray((room_mask[0, 0].cpu().numpy() * 255).astype(np.uint8), "L")
             image.save("room_mask.png")
 
         return room_mask
 
     def generate(self, layout_spec: SceneLayoutSpec, **kwargs) -> list[dict[str, Any]]:
         room_mask = self.prepare_inputs(layout_spec)
-        bbox_params = self.model.generate_boxes(room_mask=room_mask)
+        bbox_params = self.model.generate_boxes(room_mask=room_mask, device=self.device)
         boxes = self.descale_bbox_params(bbox_params)
         return self.prepare_outputs(boxes)
 
@@ -187,12 +188,12 @@ class DiffuScene(LayoutBase):
         :return: tensor of mask of room, with 1 representing valid placement and 0 otherwise
         """
         room_mask = layout_spec.arch.get_room_mask(
-            layout_size=self.room_layout_size, room_dims=self.room_dims, device="cpu"
+            layout_size=self.room_layout_size, room_dims=self.room_dims, device=self.device
         )
 
         # write room_mask to image for debugging
         if self.export_room_mask:
-            image = Image.fromarray((room_mask[0, 0].numpy() * 255).astype(np.uint8), "L")
+            image = Image.fromarray((room_mask[0, 0].cpu().numpy() * 255).astype(np.uint8), "L")
             image.save("room_mask.png")
 
         return room_mask
@@ -399,6 +400,9 @@ class InstructScene(LayoutBase):
         self.up_axis = config.data.up_axis
         self.export_room_mask = config.export_room_mask
         self.device = config.get("device", "cpu")
+        print("*******************")
+        print(self.device)
+        print("*******************")
         self.cfg_scale = config.network.cfg_scale
         self.max_length = config.data.max_length
         self.predicate_types = config.data.predicate_types
@@ -467,7 +471,9 @@ class InstructScene(LayoutBase):
             except KeyError:
                 # If exact match fails, try to find a close match
                 print(f"Using close match for object: {ob['name']}")
-                close_matches = [key for key in InstructScene.OBJECT_LOOKUP[room_type].keys() if ob["name"].lower() in key.lower()]
+                close_matches = [
+                    key for key in InstructScene.OBJECT_LOOKUP[room_type].keys() if ob["name"].lower() in key.lower()
+                ]
                 if close_matches:
                     objs.append(InstructScene.OBJECT_LOOKUP[room_type][close_matches[0]])
                 else:
@@ -482,8 +488,8 @@ class InstructScene(LayoutBase):
         # parse edges/relationships from scene graph
         edges = len(self.predicate_types) * torch.ones((self.max_length, self.max_length), dtype=torch.int64)  # (n, n)
         for rel in scene_graph["relationships"]:
-            subject_id = rel["subject_id"] - 1  # originally 1-indexed
-            target_id = rel["target_id"] - 1
+            subject_id = rel["subject_id"]
+            target_id = rel["target_id"]
 
             try:
                 edges[subject_id, target_id] = self.predicate_types.index(rel["type"])

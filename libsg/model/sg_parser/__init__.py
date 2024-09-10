@@ -7,14 +7,15 @@ from hydra import compose
 from .base import BaseSceneParser
 from .llm_sg_parser import LLMSceneParser as LLM
 from .room_type import RoomTypeParser as RoomType
+from .room_type_llm import RoomTypeLLMParser as RoomTypeLLM
 from .instructscene import InstructSceneParser as InstructScene
 from libsg.scene_types import SceneSpec
 
 
-__all__ = ["LLM", "RoomType", "InstructScene"]
+__all__ = ["LLM", "RoomType", "RoomTypeLLM", "InstructScene"]
 
 
-def build_parser_model(scene_spec: SceneSpec, model_name: str, config: DictConfig) -> BaseSceneParser:
+def build_parser_model(scene_spec: SceneSpec, model_name: str, config: DictConfig, **kwargs) -> BaseSceneParser:
     """Build instantiation of scene description parser model given specification.
 
     :param scene_spec: specification of scene, as some scenes require different models.
@@ -37,4 +38,4 @@ def build_parser_model(scene_spec: SceneSpec, model_name: str, config: DictConfi
     else:
         model_config = OmegaConf.create({"scene_parser": {}})
 
-    return getattr(this, model_name)(model_config.scene_parser)
+    return getattr(this, model_name)(model_config.scene_parser, **kwargs)

@@ -1,0 +1,10 @@
+default_model: SquareRoomGenerator
+config:
+  SquareRoomGenerator:
+    _target_: libsg.model.arch_generator.SquareRoomGenerator
+    _convert_: all
+    room_size: [6, 6]
+    up: [0, 0, 1]
+    front: [0, 1, 0]
+    scale_to_meters: 1.0
+    version: "arch@1.0.2"

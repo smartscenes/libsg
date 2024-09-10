@@ -11,7 +11,7 @@ from libsg.model.instructscene.sg_diffusion_vq_objfeat import scatter_trilist_to
 from libsg.model.instructscene.clip_encoders import CLIPTextEncoder
 from libsg.scene_types import SceneSpec, SceneType
 from .base import BaseSceneParser
-from .room_type import RoomTypeParser
+from .room_type_llm import RoomTypeLLMParser
 
 
 class InstructSceneParser(BaseSceneParser):
@@ -20,7 +20,7 @@ class InstructSceneParser(BaseSceneParser):
     modules using the InstructScene method.
     """
 
-    def __init__(self, config: DictConfig):
+    def __init__(self, config: DictConfig, **kwargs):
         super().__init__()
         self.raw_classes = list(config.data.raw_classes)
         self.device = config.get("device", "cpu")
@@ -33,7 +33,7 @@ class InstructSceneParser(BaseSceneParser):
         self.text_encoder = CLIPTextEncoder(config.network.text_encoder, device=self.device)
         self.text_to_sg_model = self._load_text_to_sg_model(config, text_emb_dim=self.text_encoder.text_emb_dim)
 
-        self.room_type_parser = RoomTypeParser(OmegaConf.create({}))
+        self.room_type_parser = RoomTypeLLMParser(OmegaConf.create({}))
 
     def _load_text_to_sg_model(self, config: DictConfig, text_emb_dim: int) -> SgObjfeatVQDiffusion:
         """Initialize model for parsing scene graph from text"""
@@ -86,6 +86,7 @@ class InstructSceneParser(BaseSceneParser):
             raw=scene_spec.input,
             scene_graph=scene_graph,
             room_type=room_type,
+            arch_spec=scene_spec.arch_spec,
         )
 
     def _process_outputs(

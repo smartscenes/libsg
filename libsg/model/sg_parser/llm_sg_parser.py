@@ -81,6 +81,8 @@ class LLMSceneParser(BaseSceneParser):
     Parse an unstructured scene description into a structured scene specification using an LLM-based method.
 
     Use of this module requires an OPENAI_API_KEY environment variable.
+
+    See https://platform.openai.com/docs/models for additional models supported by OpenAI.
     """
 
     prompts = {
@@ -88,8 +90,9 @@ class LLMSceneParser(BaseSceneParser):
         "3dfront": THREEDFRONT_SCENE_GRAPH_PROMPT,
     }
 
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: DictConfig, **kwargs):
         self.prompt = LLMSceneParser.prompts[cfg.prompt_type]
+        self.model = kwargs.get("sceneInference.parserLLM", "gpt-4o")
 
     def parse(self, scene_spec: SceneSpec) -> SceneSpec:
         print(f"Parsing scene graph from text input: {scene_spec.input}")
@@ -105,7 +108,7 @@ class LLMSceneParser(BaseSceneParser):
         inp = self.prompt.format(scene_spec.input)
 
         response = client.chat.completions.create(
-            model=MODEL,
+            model=self.model,
             messages=[
                 {
                     "role": "system",
@@ -128,4 +131,5 @@ class LLMSceneParser(BaseSceneParser):
             raw=scene_spec.input,
             scene_graph=output_json,
             room_type=output_json["room_type"],
+            arch_spec=scene_spec.arch_spec,
         )

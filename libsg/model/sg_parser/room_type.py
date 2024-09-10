@@ -15,7 +15,7 @@ class RoomTypeParser(BaseSceneParser):
     any other information in the scene specification.
     """
 
-    def __init__(self, cfg: DictConfig) -> None:
+    def __init__(self, cfg: DictConfig, **kwargs) -> None:
         pass
 
     def parse(self, scene_spec: SceneSpec) -> SceneSpec:
@@ -27,6 +27,7 @@ class RoomTypeParser(BaseSceneParser):
                     format=scene_spec.format,
                     raw=scene_spec.input,
                     room_type="livingroom",
+                    arch_spec=scene_spec.arch_spec,
                 )
             elif "dining room" in scene_spec.input:
                 return SceneSpec(
@@ -35,6 +36,7 @@ class RoomTypeParser(BaseSceneParser):
                     format=scene_spec.format,
                     raw=scene_spec.input,
                     room_type="diningroom",
+                    arch_spec=scene_spec.arch_spec,
                 )
             elif "bedroom" in scene_spec.input:
                 return SceneSpec(
@@ -43,6 +45,7 @@ class RoomTypeParser(BaseSceneParser):
                     format=scene_spec.format,
                     raw=scene_spec.input,
                     room_type="bedroom",
+                    arch_spec=scene_spec.arch_spec,
                 )
             else:
                 raise ValueError(f"Cannot parse room type from scene specification: {scene_spec.input}")

@@ -69,3 +69,5 @@ validation:
     splits: ["test"]
     batch_size: 256
     frequency: 1
+
+device: cuda

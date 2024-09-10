@@ -80,6 +80,14 @@ class Point:
         return self.__class__.add(self, other)
 
     @classmethod
+    def mult(cls, a: Self, b: float) -> Self:
+        """Multiply point by scalar"""
+        return cls(*[a[i] * b for i in range(0, cls.SIZE)])
+
+    def __mul__(self, other: float) -> Self:
+        return self.__class__.mult(self, other)
+
+    @classmethod
     def distance_sq(cls, a: Self, b: Self) -> float:
         """Compute squared distance between two points"""
         return sum([(a[i] - b[i]) * (a[i] - b[i]) for i in range(0, cls.SIZE)])
@@ -135,6 +143,9 @@ class Point:
 
     def __eq__(self, other: Self) -> bool:
         return self.tolist() == other.tolist()
+
+    def __repr__(self) -> str:
+        return self.__class__.__name__ + "(" + ", ".join(str(self[i]) for i in range(self.SIZE)) + ")"
 
 
 class Point2D(Point):
@@ -594,6 +605,13 @@ class Floor(ArchHorizontalPlane):
         )
         return element
 
+    def contains(self, bbox: BBox3D, wall_depth: float = 0.0) -> bool:
+        floor = Polygon([(p.x, p.y) for p in self.points])
+        floor_with_walls = floor.buffer(-wall_depth / 2, cap_style="square")
+        box_proj = Polygon([(bbox.min.x, bbox.min.y), (bbox.min.x, bbox.max.y), (bbox.max.x, bbox.max.y), (bbox.max.x,
+        bbox.min.y)])
+        return box_proj.within(floor_with_walls)
+
 
 class Ceiling(ArchHorizontalPlane):
     """Ceiling object in scene"""
@@ -762,6 +780,17 @@ class SceneSpec:
     raw: Optional[str] = None
     scene_graph: Optional[JSONDict] = None
     room_type: Optional[str] = None
+    arch_spec: Optional["ArchSpec"] = None
+
+
+@dataclass
+class ArchSpec:
+    """Specification of scene description"""
+
+    type: SceneType
+    input: Optional[str]
+    format: str  # HAB, STK
+    room_ids: Optional[list[str]] = None
 
 
 @dataclass

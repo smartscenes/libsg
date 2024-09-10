@@ -25,3 +25,5 @@ feature_extractor:
   feature_size: 64
   freeze_bn: true
   input_channels: 1
+
+device: cuda

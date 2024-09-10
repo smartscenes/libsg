@@ -17,6 +17,8 @@ from urllib3.util.retry import Retry
 
 from libsg.assets import AssetDb
 from libsg.arch import Architecture
+from libsg.model.arch_generator import build_arch_model
+from libsg.scene_types import ArchSpec
 
 
 class ArchBuilder:
@@ -28,20 +30,29 @@ class ArchBuilder:
     DEFAULT_FRONT = [0, 1, 0]
     LAST_ARCH = None
 
-    def __init__(self, cfg: DictConfig):
-        self.__arch_db = AssetDb("arch", cfg)
+    def __init__(self, cfg: DictConfig, arch_cfg: DictConfig, **kwargs):
+        self.__arch_db = AssetDb("arch", cfg.get("arch_db"))
 
         self.session = requests.Session()
         retries = Retry(total=5, backoff_factor=1)
         self.session.mount("https://", HTTPAdapter(max_retries=retries))
 
-    def generate(self, description: str) -> Architecture:
-        pass
+        self.arch_cfg = arch_cfg
+        self.arch_model = kwargs.get("sceneInference.arch.genModel", self.arch_cfg.default_model)
+
+    def generate(self, arch_spec: ArchSpec, min_size: float = 0.0) -> Architecture:
+        arch_model = build_arch_model(arch_spec, self.arch_model, self.arch_cfg)
+        return arch_model.generate(arch_spec)
 
     def modify(self, arch: Architecture, description: str) -> Architecture:
         pass
 
-    def retrieve(self, description: Optional[str] = None, whole_scene: bool = False, min_size: float = 0.0) -> Architecture:
+    def retrieve(
+        self,
+        arch_spec: ArchSpec,
+        whole_scene: bool = False,
+        min_size: float = 0.0,
+    ) -> Architecture:
         """Retrieve architecture from database.
 
         Because structured3d scenes have the y-axis as upward and use a left-handed coordinate system (LHS), the code
@@ -57,7 +68,7 @@ class ArchBuilder:
         random). Defaults to False.
         :return: architecture of room in scene, including walls, floors, and ceilings.
         """
-        arch_url = self.__arch_db.get(description)  # assumes description is ID of scene
+        arch_url = self.__arch_db.get(arch_spec.input)  # assumes description is ID of scene
         logging.debug(f"Retrieving architecture from {arch_url}")
         try:
             resp = self.session.get(arch_url)
@@ -72,6 +83,12 @@ class ArchBuilder:
         arch.set_axes(Architecture.DEFAULT_UP, Architecture.DEFAULT_FRONT, invert=True, rotate=np.pi)
 
         if not whole_scene:
+            if arch_spec.room_ids:
+                arch = arch.filter_by_rooms(arch_spec.room_ids)
+                logging.debug(f"Selected rooms: {arch_spec.room_ids}")
+                arch.center_architecture()
+                return arch
+
             large_rooms = []
 
             # filtering rooms with walls, since sometimes the entire scene is considered one "room"
@@ -92,11 +109,11 @@ class ArchBuilder:
 
             if large_rooms:
                 room = random.choice(large_rooms)
-                arch = arch.filter_by_rooms(room.id)
+                arch = arch.filter_by_rooms([room.id])
                 logging.debug(f"Selected room: {room.id}")
                 arch.center_architecture()
                 return arch
 
             else:  # repeat until you find a large enough room
                 print("Could not find a large room in architecture. Repeating search...")
-                return self.retrieve(description, whole_scene, min_size)
+                return self.retrieve(arch_spec, whole_scene, min_size)

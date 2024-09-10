@@ -2,6 +2,8 @@ default_model: LLM
 config:
   RoomType:
     load_by_spec: false
+  RoomTypeLLM:
+    load_by_spec: false
   LLM:
     load_by_spec: false
     config: llm.yaml

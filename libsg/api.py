@@ -100,7 +100,7 @@ Can extend to handle object groups (ObjectSpec -> ObjectGroupSpec)
 def object_add(scene_state: SceneState, object_spec: ObjectSpec, placement_spec: PlacementSpec) -> SceneState:
     raise NotImplementedError("Not tested")
 
-    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout)
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.arch, cfg.layout)
     return scene_builder.object_add(scene_state, object_spec, placement_spec)
 
 
@@ -110,7 +110,7 @@ def object_remove(scene_state: SceneState, object_spec: ObjectSpec) -> SceneStat
     # TODO match object_spec to object in scene, remove and return scene
     raise NotImplementedError("Not tested")
 
-    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout)
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.arch, cfg.layout)
     new_scene_state = scene_builder.object_remove(scene_state, object_spec)
     return new_scene_state
 
@@ -192,7 +192,7 @@ def scene_generate_layout(layout_spec: SceneLayoutSpec, model_name: Optional[str
                 'orientation': rotation angle to apply to each object in radians,
             }
     """
-    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout, **kwargs)
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.arch, cfg.layout, **kwargs)
     layout = scene_builder.generate_layout(layout_spec, model_name)
     return layout
 
@@ -205,7 +205,7 @@ def scene_generate(scene_spec: SceneSpec, **kwargs) -> JSONDict:
     :return: scene state object specifying architecture and objects to use in scene, and their locations
     """
     parsed_scene_spec = SceneParser(cfg.parser, **kwargs).parse(scene_spec)
-    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout, **kwargs)
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.arch, cfg.layout, **kwargs)
     scene_state = scene_builder.generate(parsed_scene_spec)
     return scene_state
 
@@ -224,7 +224,7 @@ def scene_retrieve(scene_spec: SceneSpec, **kwargs) -> SceneState:
     :param scene_spec: specification of scene to retrieve
     :return: scene state object specifying architecture and objects to use in scene, and their locations
     """
-    scene_builder = SceneBuilder(cfg.scene_builder, cfg.layout, **kwargs)
+    scene_builder = SceneBuilder(cfg.scene_builder, cfg.arch, cfg.layout, **kwargs)
     scene_state = scene_builder.retrieve(scene_spec)
     return scene_state
 

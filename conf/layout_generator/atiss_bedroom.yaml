@@ -1,5 +1,4 @@
 weight_file: .data/models/atiss/bedroom/model_00400.zip
-# weight_file: .data/models/atiss/bedroom_ivan/model_01950
 
 data:
   room_layout_size: "64,64"
@@ -26,3 +25,5 @@ feature_extractor:
   feature_size: 64
   freeze_bn: true
   input_channels: 1
+
+device: cuda

@@ -7,6 +7,7 @@ from scipy.spatial.transform import Rotation
 
 from libsg.simulator import Simulator
 from libsg.geo import Transform
+from libsg.scene_types import Point3D
 
 
 class SimScene:
@@ -25,6 +26,8 @@ class SimScene:
         for el in self.scene.arch.elements:
             if el.type == "Wall":
                 SimScene.add_wall(self.sim, el, use_y_up=use_y_up)
+            elif el.type == "Floor":
+                SimScene.add_floor(self.sim, el, use_y_up=use_y_up)
         for mi in self.scene.model_instances:
             SimScene.add_object(self.sim, self.asset_paths["collision_mesh_dir"], mi, static=True)
         self.sim.set_single_collection_filter_group()
@@ -50,6 +53,22 @@ class SimScene:
         transform = Transform()
         transform.set_translation(pos)
         return sim.add_box(obj_id="ground", half_extents=half_extents, transform=transform, static=True)
+
+    @staticmethod
+    def add_floor(sim, node, use_y_up=False):
+        h = node.depth
+        min_pt = Point3D.min(node.points)
+        max_pt = Point3D.max(node.points)
+        if use_y_up:
+            max_pt.y += h
+        else:
+            max_pt.z += h
+        half_extents = np.array(((max_pt - min_pt) * 0.5).tolist())
+        c = np.array(((min_pt + max_pt) * 0.5).tolist())
+        rotation = np.array([0, 0, 0, 1])
+        scale = np.array([1.0, 1.0, 1.0])
+        transform = Transform.from_rts(rotation, np.squeeze(c), scale)
+        return sim.add_box(obj_id=node.id, half_extents=half_extents, transform=transform, static=True)
 
     @staticmethod
     def add_wall(sim, node, use_y_up=False):
