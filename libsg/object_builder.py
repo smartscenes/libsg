@@ -51,6 +51,7 @@ class ObjectBuilder:
     DEFAULT_UP = [0, 0, 1]
     DEFAULT_FRONT = [0, 1, 0]
     DEFAULT_ROWS = 25000
+    DEFAULT_SOURCES = "fpModel"
     LAST_ARCH = None
 
     def __init__(self, model_db: AssetDb, cfg: DictConfig, **kwargs):
@@ -81,12 +82,12 @@ class ObjectBuilder:
 
         self._text_encoder = None
 
-        sources_raw = kwargs.get("sceneInference.assetSources")
-        if sources_raw:
+        sources_raw = kwargs.get("sceneInference.assetSources", self.DEFAULT_SOURCES)
+        if sources_raw and sources_raw != "*":
             self.sources = sources_raw.split(",")
         else:
             self.sources = None
-        use_wnsynset = kwargs.get("sceneInference.useCategory", "false").lower()
+        use_wnsynset = kwargs.get("sceneInference.useCategory", "true").lower()
         if use_wnsynset not in {"true", "false"}:
             raise ValueError(f"Invalid value for sceneInference.useCategory: {use_wnsynset}")
         self.use_wnsynset = use_wnsynset == "true"
