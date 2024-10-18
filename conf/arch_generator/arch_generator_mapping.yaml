@@ -8,3 +8,10 @@ config:
     front: [0, 1, 0]
     scale_to_meters: 1.0
     version: "arch@1.0.2"
+  Holodeck:
+    _target_: libsg.model.arch_generator.Holodeck
+    llm_model_name: gpt-4o-2024-05-13
+    materials_dir: "${oc.env:HOME}/.objathor-assets/holodeck/2023_09_23/materials"
+    clip_params:
+      model_name: "ViT-L-14"
+      pretrained: "laion2b_s32b_b82k"

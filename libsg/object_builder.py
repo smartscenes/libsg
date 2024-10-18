@@ -271,9 +271,14 @@ class ObjectBuilder:
                 return ModelInstance(model_id=model_id, up=up, front=front)
 
         match object_spec.type:
-            case "model_id":
+            case "id":
                 model_id = object_spec.description
-                return ModelInstance(model_id=model_id)
+                metadata = self.__model_db.get_metadata(model_id)
+                if metadata:
+                    return parse_response(metadata)
+                else:
+                    logging.error(f"Cannot find object in solr with id {model_id}")
+                    return None
 
             case "category":  # use solr to search based on wnsynsetkey
                 query = object_spec.description if object_spec.description else "*"

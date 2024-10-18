@@ -9,6 +9,8 @@ import base64
 import copy
 import struct
 import sys
+import uuid
+from collections import defaultdict
 from itertools import product
 from pathlib import Path
 from typing import Callable, Self
@@ -19,6 +21,7 @@ from shapely import Polygon
 from shapely.geometry import MultiPoint
 
 from libsg.scene_types import ArchElement, Room, Opening, Wall, Floor, Ceiling, Window, Door, JSONDict, Point3D
+from libsg.model.holodeck.materials import MaterialsDB
 
 
 class Architecture:
@@ -57,6 +60,7 @@ class Architecture:
 
         self.__special_mats = {"Glass": {"uuid": "mat_glass", "color": "#777777", "opacity": 0.1, "transparent": True}}
         self.__included_special_mats = []
+        self.raw = None
 
     @property
     def rooms(self) -> list[Room]:
@@ -89,6 +93,11 @@ class Architecture:
     def find_elements_by_type(self, element_type: str) -> filter:
         """Return all elements of the specified type (e.g. "Wall", "Ceiling", "Floor")."""
         return filter(lambda elem: elem.type == element_type, self.elements)
+
+    def add_region(self, region: JSONDict) -> ArchElement:
+        room = Room.from_json(region)
+        self._rooms[room.id] = room
+        return room
 
     def add_element(self, element: JSONDict) -> ArchElement:
         """
@@ -419,15 +428,15 @@ class Architecture:
         floor_points = []
         floor_elements = list(self.find_elements_by_type("Floor"))
         for floor in floor_elements:
-            floor_points.extend([(point.x, point.y) for point in floor.points])
+            floor_points.extend([(point[0], point[1], point[2]) for point in floor.points])
         
         # Create faces as triangles
         floor_faces = []
         for i in range(1, len(floor.points) - 1):
-            floor_faces.append([0, i, i+1])
+            floor_faces.append([0, i, i + 1])
         floor_faces = np.array(floor_faces)
         
-        return floor.points, floor_faces, floor.room_id
+        return floor_points, floor_faces, floor.room_id
     
     def get_door_positions(self, room_id):
         door_positions = []
@@ -437,18 +446,17 @@ class Architecture:
                     if isinstance(opening, Door):
                         # Get wall start and end points
                         wall_start = np.array([element.points[0].x, element.points[0].y, element.points[0].z])
-                        
+
                         wall_end = np.array([element.points[1].x, element.points[1].y, element.points[1].z])
                         print("wall_start", "wall_end")
                         print(wall_start, wall_end)
                         # Calculate door position along the wall
                         door_position = wall_start + (wall_end - wall_start) * opening.mid
-                        
+
                         door_positions.append(door_position)
 
         return np.array(door_positions) if door_positions else None
 
-    
     @classmethod
     def from_json(cls, obj: JSONDict) -> Self:
         """Return Architecture object based on JSON input."""
@@ -459,10 +467,398 @@ class Architecture:
         if "defaults" in obj:
             arch.defaults = obj["defaults"]
         arch.unit = obj["scaleToMeters"]
+        for region in obj.get("regions", []):
+            arch.add_region(region)
         arch._rooms = {region["id"]: Room.from_json(region) for region in obj.get("regions", [])}
 
         arch.add_elements(obj["elements"])  # included openings
         arch.materials = obj.get("materials", [])
         arch.textures = obj.get("textures", [])
         arch.images = obj.get("images", [])
+        arch.raw = obj
         return arch
+
+    @classmethod
+    def from_ai2thor(cls, scene: JSONDict, materials: MaterialsDB) -> Self:
+        """
+        Return Architecture object based on JSON ai2thor input format (e.g. used by Holodeck).
+
+        The main architectural components we need to convert are rooms, walls, floors, ceilings, and openings (doors
+        and windows). Holodeck organizes the scene into the following format (ignoring irrelevant fields):
+        {
+            "doors": [{
+                "id": door|idx|room0|room1,
+                "openable": bool,
+                "openness": 0 or 1,  # 0 for closed, 1 for open
+                "room0": room_id,
+                "room1": room_id,
+                "wall0": wall_id,  # wall for room 0
+                "wall1": wall_id,  # wall for room 1
+                "holePolygon": [
+                    {"x": min_coord_along_wall_dim, "y": 0, "z": 0},  # all doors start at top of floor
+                    {"x": max_coord_along_wall_dim, "y": door_height, "z": 0}
+                ],
+                "assetPosition": {"x": midpoint_along_wall_dim, midpoint_along_height, "z": 0},
+                "doorBoxes": [[pt1+perp_vec, pt2+perp_vec, pt2, pt1], [pt1, pt2, pt2-perp_vec, pt1-perp_vec]],  # box containing the door, using a default width of 1.0
+                "doorSegment": [
+                    [start_x_from_wall_start, start_z_from_wall_start],
+                    [end_x_from_wall_start, end_z_from_wall_start]
+                ],  # each point pt1, pt2 is wall_coord_start + normalized_vector * {door_start, door_end}
+            }],
+            "rooms": [...],
+            "walls": [{
+                "id": wall|roomId|direction|idx(|exterior),
+                "roomId": room_id,
+                "material": {"name": wall_material},
+                "polygon: [
+                    {"x": x0, "y": 0, "z": z0},
+                    {"x": x0, "y": height, "z": z0},
+                    {"x": x1, "y": height, "z": z1},  # either x0 == x1 or z0 == z1
+                    {"x": x1, "y": 0, "z": z1}
+                ],
+                "connected_rooms": [{
+                    "intersection": [{"x": x0, "y": 0, "z": z0}, {"x": x1, "y": 0, "z": z1}],
+                    "line0": [{"x": x0, "y": 0, "z": z0}, {"x": x1, "y": 0, "z": z1}],  # room0
+                    "line1": [{"x": x1, "y": 0, "z": z1}, {"x": x0, "y": 0, "z": z0}],  # room1
+                    "roomId": room1_id,  # connected room
+                    "wallId": wall_id,  # pair wall of other room
+                }],  # empty list if no connected rooms
+                "width": float,  # width of wall
+                "height": float,  # height of wall
+                "direction": "north"|"south"|"east"|"west",  # x0 == x1 for east/west, z0 == z1 for north/south
+                "segment": [[x0, z0], [x1, z1]],
+                "connect_exterior": exterior_wall_id,  # not present if wall does not connect to exterior
+            }],
+            "wall_height": float,
+            "windows": [{
+                "id": door|idx|room0|room1,
+                "room0": room_id,
+                "room1": room_id,
+                "wall0": wall_id,  # wall for room 0
+                "wall1": wall_id,  # wall for room 1
+                "holePolygon": [
+                    {"x": min_coord_along_wall_dim, "y": window_bottom, "z": 0},
+                    {"x": max_coord_along_wall_dim, "y": window_top, "z": 0}
+                ],
+                "assetPosition": {"x": midpoint_along_wall_dim, midpoint_along_height, "z": 0},
+                "windowBoxes": [[pt1+perp_vec, pt2+perp_vec, pt2, pt1], [pt1, pt2, pt2-perp_vec, pt1-perp_vec]],  # box containing the window, using a default width of 1.0
+                "windowSegment": [
+                    [start_x_from_wall_start, start_z_from_wall_start],
+                    [end_x_from_wall_start, end_z_from_wall_start]
+                ],  # each point pt1, pt2 is wall_coord_start + normalized_vector * {door_start, door_end}
+            }],
+            "room_pairs": [...],
+        }
+        """
+        arch = Architecture(scene.get("id", str(uuid.uuid4())))
+        arch.up = [0, 1, 0]
+        arch.front = [0, 0, 1]
+        arch.unit = 1.0
+        # ProcTHOR default is 0.1/2 but that causes issues with pictures on walls; use half that
+        wall_thickness = 0.025
+        room_heights = {}
+
+        # doors & windows
+        wall_to_holes = {}
+        for opening in scene["doors"] + scene["windows"]:
+            pts = opening["holePolygon"]
+            box = {"min": [pts[0]["x"], pts[0]["y"]], "max": [pts[1]["x"], pts[1]["y"]]}
+            hole = {
+                "id": f"{opening['id']}",
+                "type": "door" if opening["id"].startswith("door") else "window",
+                "box": box,
+                "wall1": opening["wall1"],
+                "asset": {"id": opening["assetId"]},
+            }
+            wall0_holes = wall_to_holes.get(opening["wall0"], [])
+            wall0_holes.append(hole)
+            wall1_holes = wall_to_holes.get(opening["wall1"], [])
+            wall1_holes.append(copy.deepcopy(hole))
+            wall_to_holes[opening["wall0"]] = wall0_holes
+            wall_to_holes[opening["wall1"]] = wall1_holes
+
+        # walls
+        for wall in scene["walls"]:
+            if wall.get("empty", False):  # this is a "non-wall" (boundary between two rooms with no wall)
+                continue
+            pts = wall["polygon"]  # four points
+            # i = (
+            #     2 if "exterior" in wall["id"] else 0
+            # )  # low points are first two for interior, last two for exterior walls
+            pts_low = [[pts[0]["x"], pts[0]["y"], pts[0]["z"]], [pts[3]["x"], pts[3]["y"], pts[3]["z"]]]
+            min_y = min(pts[0]["y"], pts[1]["y"], pts[2]["y"], pts[3]["y"])
+            max_y = max(pts[0]["y"], pts[1]["y"], pts[2]["y"], pts[3]["y"])
+            height = max_y - min_y
+            if height >= room_heights.get(wall["roomId"], 0):
+                room_heights[wall["roomId"]] = height
+
+            wall_element = {
+                "id": wall["id"],
+                "type": "Wall",
+                "points": pts_low,
+                "height": height,
+                "roomId": wall["roomId"],
+                "depth": wall_thickness,
+                "materials": [materials.stk_mat(wall["material"])],
+            }
+
+            if wall["id"] in wall_to_holes:  # add any opening holes
+                wall_holes = wall_to_holes[wall["id"]]
+                for hole in wall_holes:
+                    if wall["id"] == hole["wall1"]:  # hole box definition flipped along x for "back wall"
+                        d0 = pts_low[1][0] - pts_low[0][0]
+                        d1 = pts_low[1][2] - pts_low[0][2]
+                        wall_width = np.sqrt(d0 * d0 + d1 * d1)
+                        x0 = hole["box"]["min"][0]
+                        x1 = hole["box"]["max"][0]
+                        hole["box"]["max"][0] = wall_width - x0
+                        hole["box"]["min"][0] = wall_width - x1
+                wall_element["holes"] = wall_holes
+
+            arch.add_element(wall_element)
+
+        ceiling_mat = copy.copy(scene["proceduralParameters"]["ceilingMaterial"])
+        if "ceilingColor" in scene["proceduralParameters"]:
+            ceiling_mat["color"] = scene["proceduralParameters"]["ceilingColor"]
+
+        # rooms
+        for room in scene["rooms"]:
+            poly_pts = [[p["x"], p["y"], p["z"]] for p in room["floorPolygon"]]
+            arch.add_region({"id": room["id"]})
+            floor = {
+                "id": f"{room['id']}|f",
+                "type": "Floor",
+                "points": poly_pts,
+                "roomId": room["id"],
+                "materials": [materials.stk_mat(room["floorMaterial"])],
+            }
+            arch.add_element(floor)
+
+            room_height = room_heights[room["id"]]
+            ceil_poly_pts = [[p["x"], p["y"] + room_height, p["z"]] for p in room["floorPolygon"]]
+            ceiling = {
+                "id": f"{room['id']}|c",
+                "type": "Ceiling",
+                "points": ceil_poly_pts,
+                "roomId": room["id"],
+                "materials": [materials.stk_mat(ceiling_mat)],
+            }
+            arch.add_element(ceiling)
+
+        import pprint
+
+        print("RAW:")
+        print("----------------")
+        pprint.pprint(scene)
+        print("BEFORE:")
+        print("----------------")
+        pprint.pprint(arch.to_json())
+        # arch.center_architecture()
+        arch.set_axes(Architecture.DEFAULT_UP, Architecture.DEFAULT_FRONT, invert=True, rotate=np.pi)
+        arch.raw = scene
+        print("AFTER:")
+        print("----------------")
+        pprint.pprint(arch.to_json())
+
+        return arch
+
+    # @classmethod
+    # def from_holodeck(cls, scene: JSONDict) -> Self:
+    #     """
+    #     Return Architecture object based on JSON Holodeck input format.
+
+    #     The main architectural components we need to convert are rooms, walls, floors, ceilings, and openings (doors
+    #     and windows). Holodeck organizes the scene into the following format (ignoring irrelevant fields):
+    #     {
+    #         "doors": [{
+    #             "id": door|idx|room0|room1,
+    #             "openable": bool,
+    #             "openness": 0 or 1,  # 0 for closed, 1 for open
+    #             "room0": room_id,
+    #             "room1": room_id,
+    #             "wall0": wall_id,  # wall for room 0
+    #             "wall1": wall_id,  # wall for room 1
+    #             "holePolygon": [
+    #                 {"x": min_coord_along_wall_dim, "y": 0, "z": 0},  # all doors start at top of floor
+    #                 {"x": max_coord_along_wall_dim, "y": door_height, "z": 0}
+    #             ],
+    #             "assetPosition": {"x": midpoint_along_wall_dim, midpoint_along_height, "z": 0},
+    #             "doorBoxes": [[pt1+perp_vec, pt2+perp_vec, pt2, pt1], [pt1, pt2, pt2-perp_vec, pt1-perp_vec]],  # box containing the door, using a default width of 1.0
+    #             "doorSegment": [
+    #                 [start_x_from_wall_start, start_z_from_wall_start],
+    #                 [end_x_from_wall_start, end_z_from_wall_start]
+    #             ],  # each point pt1, pt2 is wall_coord_start + normalized_vector * {door_start, door_end}
+    #         }],
+    #         "rooms": [...],
+    #         "walls": [{
+    #             "id": wall|roomId|direction|idx(|exterior),
+    #             "roomId": room_id,
+    #             "material": {"name": wall_material},
+    #             "polygon: [
+    #                 {"x": x0, "y": 0, "z": z0},
+    #                 {"x": x0, "y": height, "z": z0},
+    #                 {"x": x1, "y": height, "z": z1},  # either x0 == x1 or z0 == z1
+    #                 {"x": x1, "y": 0, "z": z1}
+    #             ],
+    #             "connected_rooms": [{
+    #                 "intersection": [{"x": x0, "y": 0, "z": z0}, {"x": x1, "y": 0, "z": z1}],
+    #                 "line0": [{"x": x0, "y": 0, "z": z0}, {"x": x1, "y": 0, "z": z1}],  # room0
+    #                 "line1": [{"x": x1, "y": 0, "z": z1}, {"x": x0, "y": 0, "z": z0}],  # room1
+    #                 "roomId": room1_id,  # connected room
+    #                 "wallId": wall_id,  # pair wall of other room
+    #             }],  # empty list if no connected rooms
+    #             "width": float,  # width of wall
+    #             "height": float,  # height of wall
+    #             "direction": "north"|"south"|"east"|"west",  # x0 == x1 for east/west, z0 == z1 for north/south
+    #             "segment": [[x0, z0], [x1, z1]],
+    #             "connect_exterior": exterior_wall_id,  # not present if wall does not connect to exterior
+    #         }],
+    #         "wall_height": float,
+    #         "windows": [{
+    #             "id": door|idx|room0|room1,
+    #             "room0": room_id,
+    #             "room1": room_id,
+    #             "wall0": wall_id,  # wall for room 0
+    #             "wall1": wall_id,  # wall for room 1
+    #             "holePolygon": [
+    #                 {"x": min_coord_along_wall_dim, "y": window_bottom, "z": 0},
+    #                 {"x": max_coord_along_wall_dim, "y": window_top, "z": 0}
+    #             ],
+    #             "assetPosition": {"x": midpoint_along_wall_dim, midpoint_along_height, "z": 0},
+    #             "windowBoxes": [[pt1+perp_vec, pt2+perp_vec, pt2, pt1], [pt1, pt2, pt2-perp_vec, pt1-perp_vec]],  # box containing the window, using a default width of 1.0
+    #             "windowSegment": [
+    #                 [start_x_from_wall_start, start_z_from_wall_start],
+    #                 [end_x_from_wall_start, end_z_from_wall_start]
+    #             ],  # each point pt1, pt2 is wall_coord_start + normalized_vector * {door_start, door_end}
+    #         }],
+    #         "room_pairs": [...],
+    #     }
+    #     """
+    #     # generate JSON form
+    #     arch_stk = {
+    #         "id": str(uuid.uuid4()),
+    #         "regions": [],
+    #         "elements": [],
+    #         "up": [0, 1, 0],
+    #         "front": [0, 0, 1],
+    #         "scaleToMeters": Architecture.DEFAULT_SCALE_TO_METERS,
+    #         "version": Architecture.DEFAULT_VERSION,
+    #     }
+
+    #     # parse walls as a lookup
+    #     walls_raw = {wall["id"]: wall for wall in scene["walls"]}
+
+    #     # parse openings
+    #     holes_lookup = defaultdict(list)
+    #     opening_lookup = {
+    #         "doors": {"type": "Door"},
+    #         "windows": {"type": "Window"},
+    #     }
+    #     for opening_type, opening_labels in opening_lookup.items():
+    #         for opening in scene[opening_type]:
+    #             wall_0 = walls_raw[opening["wall0"]]
+    #             wall_1 = walls_raw[opening["wall1"]]
+
+    #             for wall in (wall_0, wall_1):
+    #                 x_coord = [pt[0] for pt in wall["segment"]]
+    #                 z_coord = [pt[1] for pt in wall["segment"]]
+    #                 delta = x_coord if x_coord[1] - x_coord[0] != 0 else z_coord
+    #                 height = [pt["y"] for pt in opening["holePolygon"]]  # [0.0, height]
+
+    #                 min_dist = min(
+    #                     abs(opening["holePolygon"][0]["x"] - delta[0]), abs(opening["holePolygon"][1]["x"] - delta[0])
+    #                 )
+    #                 max_dist = max(
+    #                     abs(opening["holePolygon"][0]["x"] - delta[0]), abs(opening["holePolygon"][1]["x"] - delta[0])
+    #                 )
+    #                 height = [corner["y"] for corner in opening["holePolygon"]]  # assume sorted [0.0, height]
+    #                 holes_lookup[wall["id"]].append(
+    #                     {
+    #                         "id": opening["id"],
+    #                         "type": opening_labels["type"],
+    #                         "box": {"min": [min_dist, height[0]], "max": [max_dist, height[1]]},
+    #                     }
+    #                 )
+    #     breakpoint()
+
+    #     # parse walls and openings
+    #     rooms_to_walls = defaultdict(list)
+    #     walls = []
+    #     for idx, wall in enumerate(scene["walls"]):
+    #         wall_id = f"wall_{idx}"
+    #         # Note that every wall occurs in pairs, one on the inside and one on the outside. In STK, these are treated
+    #         # as one wall, so we need to combine them in Holodeck.
+    #         if "exterior" in wall["roomId"]:
+    #             continue
+
+    #         # track walls per room
+    #         rooms_to_walls[wall["roomId"]].append(wall_id)
+
+    #         # shift wall to account for wall thickness, since Holodeck assumes 0-thickness walls
+    #         # wall_depth = Architecture.DEFAULT_ELEM_PARAMS["Wall"]["depth"]
+    #         wall_depth = 0.1  # TODO: need to account for wall depth later on
+    #         x_coord = [pt[0] for pt in wall["segment"]]
+    #         z_coord = [pt[1] for pt in wall["segment"]]
+    #         wall_points = np.array([[x, 0.0, z] for x, z in zip(x_coord, z_coord)])
+
+    #         # add wall
+    #         walls.append(
+    #             {
+    #                 "id": wall["id"],
+    #                 "type": "Wall",
+    #                 "points": wall_points.tolist(),
+    #                 "depth": wall_depth,
+    #                 "height": wall["height"],
+    #                 "holes": holes_lookup[wall["id"]],
+    #                 "materials": [
+    #                     {"diffuse": "#888899", "name": "inside", "texture": "painted_white_plane_17521"},
+    #                     {"diffuse": "#888899", "name": "outside", "texture": "painted_white_plane_17521"},
+    #                 ],  # TODO: populate from Holodeck
+    #                 "roomId": wall["roomId"],
+    #             }
+    #         )
+
+    #     for room in scene["rooms"]:
+    #         room_id = room["id"]
+
+    #         # parse floor
+    #         arch_stk["elements"].append(
+    #             {
+    #                 "id": f"{room_id}|floor",
+    #                 "type": "Floor",
+    #                 "points": [[pt["x"], pt["y"], pt["z"]] for pt in room["floorPolygon"]],
+    #                 "roomId": room_id,
+    #                 "depth": Architecture.DEFAULT_ELEM_PARAMS["Floor"]["depth"],
+    #                 "materials": [{"diffuse": "#929898", "name": "surface", "texture": "wood_cream_plane_1375"}],
+    #             }
+    #         )
+
+    #         # parse ceiling
+    #         arch_stk["elements"].append(
+    #             {
+    #                 "id": f"{room_id}|ceiling",
+    #                 "type": "Ceiling",
+    #                 "points": [[pt["x"], pt["y"], pt["z"]] for pt in room["floorPolygon"]],
+    #                 "roomId": room_id,
+    #                 "depth": Architecture.DEFAULT_ELEM_PARAMS["Ceiling"]["depth"],
+    #                 "materials": [{"diffuse": "#ffffff", "name": "surface", "texture": "painted_white_plane_17521"}],
+    #             }
+    #         )
+
+    #         # add region
+    #         arch_stk["regions"].append(
+    #             {
+    #                 "id": room_id,
+    #                 "wallIds": rooms_to_walls[room["id"]],
+    #                 "type": room["roomType"],
+    #             }
+    #         )
+
+    #     arch_stk["elements"].extend(walls)
+
+    #     # instantiate architecture
+    #     arch = Architecture.from_json(arch_stk)
+    #     arch.set_axes(Architecture.DEFAULT_UP, Architecture.DEFAULT_FRONT, invert=True, rotate=np.pi)
+    #     arch.center_architecture()
+    #     arch.raw = scene
+    #     return arch

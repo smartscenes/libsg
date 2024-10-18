@@ -76,7 +76,7 @@ class SceneBuilder:
         """
         self.layout_cfg = layout
         self.__base_solr_url = cfg.get("solr_url")
-        self.__arch_builder = ArchBuilder(cfg, arch)
+        self.__arch_builder = ArchBuilder(cfg, arch, **kwargs)
         self.__scene_db = AssetDb("scene", cfg.get("scene_db"))
         self.__model_db = AssetDb("model", cfg.get("model_db"), solr_url=f"{self.__base_solr_url}/models3d")
         self.scene_exporter = SceneExporter()
@@ -93,10 +93,11 @@ class SceneBuilder:
         self.pass_text = pass_text == "true" and self.layout_cfg.config[self.layout_model].can_condition_on_text
         # "generate", "retrieve"
         self.object_method = kwargs.get("sceneInference.object.genMethod", cfg.model_db.default_object_gen_method)
-        # "category", "embedding", "text"
+        # "id", "category", "embedding", "text"
         self.object_retrieve_type = kwargs.get(
             "sceneInference.object.retrieveType", cfg.model_db.default_object_retrieve_type
         )
+        self.move_objects_to_floor = kwargs.get("sceneInference.layout.moveObjectsToFloor", "False" if self.layout_model == "Holodeck" else "True").lower() == "true"
 
         # architecture parameters
         self.arch_method = kwargs.get("sceneInference.arch.genMethod", "retrieve")
@@ -131,7 +132,7 @@ class SceneBuilder:
         arch_spec = (
             scene_spec.arch_spec
             if scene_spec.arch_spec is not None
-            else ArchSpec(type="id", input=None, format=scene_spec.format)
+            else ArchSpec(type="id", input=None, format=scene_spec.format, prompt=scene_spec.raw)
         )
         arch, scene, base_scene_aabb = self.generate_arch(arch_spec)
         base_scene_centroid = base_scene_aabb.centroid
@@ -186,6 +187,7 @@ class SceneBuilder:
         layout = SceneLayout(
             objects=[
                 ObjectTemplateInstance(
+                    id=obj.get("id"),
                     label=obj["wnsynsetkey"],
                     dimensions=obj["dimensions"],
                     position=obj["position"],
@@ -197,6 +199,7 @@ class SceneBuilder:
             ],
             arch=layout_spec.arch,
             room_type=layout_spec.input,  # may become obsolete in the future
+            shift_by_scene_centroid=layout_model.SHIFT_BY_SCENE_CENTROID,
         )
 
         # print layout
@@ -206,7 +209,12 @@ class SceneBuilder:
             layout.export_coarse_layout("coarse_layout.obj")
         return layout
 
-    def generate_objects(self, scene: Scene, base_scene_centroid: Point3D, scene_layout: SceneLayout) -> Scene:
+    def generate_objects(
+        self,
+        scene: Scene,
+        base_scene_centroid: Point3D,
+        scene_layout: SceneLayout,
+    ) -> Scene:
         """Generate object based on scene state, with placement relative to base scene centroid
 
         :param scene_state: base scene state including architecture only
@@ -221,17 +229,22 @@ class SceneBuilder:
             dimensions = obj.dimensions
 
             # TODO heuristically re-center to base scene centroid
-            position = Point3D.add(Point3D.fromlist(obj.position), base_scene_centroid)
-            position.z = self.NEAR_FLOOR_HEIGHT  # TODO Heuristically shift to near-floor placement
+            position = (
+                Point3D.add(Point3D.fromlist(obj.position), base_scene_centroid)
+                if scene_layout.shift_by_scene_centroid
+                else Point3D.fromlist(obj.position)
+            )
+            if self.move_objects_to_floor:
+                position.z = self.NEAR_FLOOR_HEIGHT  # TODO Heuristically shift to near-floor placement
+                if synset is not None and ("pendant_lamp" in synset or "ceiling_lamp" in synset):
+                    continue  # skip ceiling lamps  # TODO: ceiling lamp placement logic
             orientation = obj.orientation - np.pi / 2  # TODO figure out why theta adjustment seems to be required here
-            if "pendant_lamp" in synset or "ceiling_lamp" in synset:
-                continue  # skip ceiling lamps  # TODO: ceiling lamp placement logic
             object_spec = ObjectSpec(
                 type=self.object_retrieve_type,
                 wnsynsetkey=synset,
                 dimensions=dimensions,
                 embedding=obj.embedding,
-                description=obj.description,
+                description=obj.id if self.object_retrieve_type == "id" else obj.description,
             )
             placement_spec = PlacementSpec(type="placement_point", position=position, orientation=orientation)
 
@@ -240,7 +253,8 @@ class SceneBuilder:
                 object_spec, placement_spec, dataset_name=scene_layout.room_type
             )
             # add object to scene
-            self.object_placer.try_add(scene, model_instance, placement_spec)
+            if model_instance is not None:
+                self.object_placer.try_add(scene, model_instance, placement_spec)
 
         return scene
 
@@ -282,7 +296,7 @@ class SceneBuilder:
             return scenestate
         else:
             raise ValueError(f"Scene specification type not supported for retrieval: {scene_spec.type}")
-    
+
     # def object_remove(self, scene_state: SceneState, object_spec: ObjectSpec) -> JSONDict:
     #     """Remove existing object from given scene.
 

@@ -608,8 +608,9 @@ class Floor(ArchHorizontalPlane):
     def contains(self, bbox: BBox3D, wall_depth: float = 0.0) -> bool:
         floor = Polygon([(p.x, p.y) for p in self.points])
         floor_with_walls = floor.buffer(-wall_depth / 2, cap_style="square")
-        box_proj = Polygon([(bbox.min.x, bbox.min.y), (bbox.min.x, bbox.max.y), (bbox.max.x, bbox.max.y), (bbox.max.x,
-        bbox.min.y)])
+        box_proj = Polygon(
+            [(bbox.min.x, bbox.min.y), (bbox.min.x, bbox.max.y), (bbox.max.x, bbox.max.y), (bbox.max.x, bbox.min.y)]
+        )
         return box_proj.within(floor_with_walls)
 
 
@@ -658,6 +659,7 @@ class WallOpening(Opening):
         raise NotImplementedError
 
 
+@dataclass
 class Window(WallOpening):
     """Class for windows in walls"""
 
@@ -677,6 +679,7 @@ class Window(WallOpening):
         return json_dict
 
 
+@dataclass
 class Door(WallOpening):
     """Class for doors in walls"""
 
@@ -719,6 +722,9 @@ class Room(ArchElement):
         room = Room(id=obj["id"])
         room.wall_sides = obj.get("wallIds", [])
         return room
+
+    def __repr__(self) -> str:
+        return f"Room(id={self.id}, wall_sides=[{', '.join(map(str, self.wall_sides))}], floor={self.floor}, ceiling={self.ceiling})"
 
 
 class ObjectInstance:
@@ -791,6 +797,7 @@ class ArchSpec:
     input: Optional[str]
     format: str  # HAB, STK
     room_ids: Optional[list[str]] = None
+    prompt: Optional[str] = None
 
 
 @dataclass
@@ -816,6 +823,7 @@ class ObjectTemplateInstance:
     dimensions: torch.Tensor  # tensor of dimensions for each object
     position: torch.Tensor  # tensor of positions for each object
     orientation: torch.Tensor  # tensor of angles to apply to each object
+    id: Optional[str] = None  # str id of object
     description: Optional[str] = None  # str description of object
     embedding: Optional[torch.Tensor] = None
 
@@ -829,6 +837,7 @@ class SceneLayout:
     objects: list[ObjectTemplateInstance]
     arch: Any = None
     room_type: Optional[str] = None
+    shift_by_scene_centroid: bool = True
 
     NEAR_FLOOR_HEIGHT = 0.05
     BOX_MESH_VERTICES = [
@@ -859,7 +868,7 @@ class SceneLayout:
         all_boxes = []
         for obj in self.objects:
             synset = obj.label
-            if "pendant_lamp" in synset or "ceiling_lamp" in synset:
+            if synset is not None and ("pendant_lamp" in synset or "ceiling_lamp" in synset):
                 continue  # skip ceiling lamps  # TODO: ceiling lamp placement logic
             origin = np.array(obj.dimensions) / 2
             origin[2] = 0.0  # put center at bottom of object for now
@@ -1056,3 +1065,36 @@ class SceneGraph:
             objects=list(objects.values()),
             relationships=relationships,
         )
+    
+    def to_json(self, fields: Optional[list[str]] = None) -> dict:
+        """
+        Convert SceneGraph object to JSON-serializable dictionary.
+        
+        :param fields: List of fields to include in the output. If None, all fields are included.
+        :return: JSON-serializable dictionary of the SceneGraph or specified fields.
+        """
+        all_fields = {
+            "id": self.id,
+            "objects": [
+                {
+                    "id": obj.id,
+                    "name": obj.name,
+                    "attributes": obj.attributes,
+                }
+                for obj in self.objects
+            ],
+            "relationships": [
+                {
+                    "id": rel.id,
+                    "type": rel.type,
+                    "subject_id": rel.subject.id,
+                    "target_id": rel.target.id,
+                }
+                for rel in self.relationships
+            ],
+        }
+        
+        if fields is None:
+            return all_fields
+        else:
+            return {field: all_fields[field] for field in fields if field in all_fields}

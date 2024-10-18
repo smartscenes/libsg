@@ -4,7 +4,7 @@ from libsg.arch import Architecture
 
 class BaseArchGenerator:
     """
-    Parse an unstructured scene description into a structured scene specification which can be used by downstream
+    Parse an architecture specification into a generated architecture in STK format which can be used by downstream
     modules.
     """
 

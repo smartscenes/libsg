@@ -17,7 +17,7 @@ class ObjectCategoryDistribution(EvaluationBase):
         self.frequencies = defaultdict(int)
         self.num_scenes = 0
 
-    def __call__(self, inp, scene_graph: SceneGraph, scene: Scene):
+    def __call__(self, inp, scene_graph: SceneGraph, scene: Scene, **kwargs):
         if scene_graph is None:
             return
 

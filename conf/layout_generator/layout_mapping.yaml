@@ -14,6 +14,18 @@ config:
     bedroom: diffusion_bedrooms_dim512_nomask_instancond_objfeats_lat32.yaml
     diningroom: diffusion_diningrooms_dim512_nomask_instancond_objfeats_lat32.yaml
     livingroom: diffusion_livingrooms_dim512_nomask_instancond_objfeats_lat32.yaml
+  Holodeck:
+    load_by_spec: false
+    params:
+      llm_model_name: gpt-4o-2024-05-13
+      clip_params:
+        model_name: "ViT-L-14"
+        pretrained: "laion2b_s32b_b82k"
+      retrieval_threshold: 28
+      random_selection: False
+      use_constraint: True
+      use_milp: False
+      add_ceiling: False
   InstructScene:
     load_by_spec: true
     can_condition_on_text: true

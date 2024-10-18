@@ -8,12 +8,16 @@ import torch.nn.functional as F
 
 
 class GumbelQuantize(nn.Module):
-    def __init__(self,
-        num_hiddens: int, embedding_dim: int, n_embed: int,
+    def __init__(
+        self,
+        num_hiddens: int,
+        embedding_dim: int,
+        n_embed: int,
         straight_through=True,
-        kl_weight=5e-4, temperature=1.,
-        remap: Optional[str]=None,
-        unknown_index: Union[str, int]="random",
+        kl_weight=5e-4,
+        temperature=1.0,
+        remap: Optional[str] = None,
+        unknown_index: Union[str, int] = "random",
     ):
         super().__init__()
 
@@ -34,9 +38,11 @@ class GumbelQuantize(nn.Module):
             self.unknown_index = unknown_index  # "random" or "extra" or integer
             if self.unknown_index == "extra":
                 self.unknown_index = self.re_embed
-                self.re_embed = self.re_embed+1
-            print(f"\nRemapping {self.n_e} indices to {self.re_embed} indices. "
-                  f"Using {self.unknown_index} for unknown indices\n")
+                self.re_embed = self.re_embed + 1
+            print(
+                f"\nRemapping {self.n_e} indices to {self.re_embed} indices. "
+                f"Using {self.unknown_index} for unknown indices\n"
+            )
         else:
             self.re_embed = n_embed
 
@@ -63,13 +69,15 @@ class GumbelQuantize(nn.Module):
         inds = inds.reshape(ishape[0], -1)  # (B, N)
         used = self.used.to(inds)  # (M,)
         if self.re_embed > self.used.shape[0]:  # extra token
-            inds[inds>=self.used.shape[0]] = 0  # simply set to zero
+            inds[inds >= self.used.shape[0]] = 0  # simply set to zero
 
-        back = torch.gather(used[None, :][[0]*inds.shape[0], :], 1, inds)
+        back = torch.gather(used[None, :][[0] * inds.shape[0], :], 1, inds)
         return back.reshape(ishape)
 
-    def forward(self, z: Tensor, temperature: Optional[float]=None, kl_weight: Optional[float]=None):
-        hard = self.straight_through if self.training else True  # force be true during eval as we must quantize; actually, always true seems to work
+    def forward(self, z: Tensor, temperature: Optional[float] = None, kl_weight: Optional[float] = None):
+        hard = (
+            self.straight_through if self.training else True
+        )  # force be true during eval as we must quantize; actually, always true seems to work
         temperature = self.temperature if temperature is None else temperature  # anneal from 1 during training
         kl_weight = self.kl_weight if kl_weight is None else kl_weight  # increase from 0 during training
 
@@ -104,7 +112,9 @@ class GumbelQuantize(nn.Module):
             indices = indices.reshape(-1)  # (B*N,)
 
         # Get quantized latent vectors
-        one_hot: Tensor = F.one_hot(indices, num_classes=self.n_embed).float()   # (B*N, M)
+        one_hot: Tensor = (
+            F.one_hot(indices, num_classes=self.n_embed).float().to(device=self.embed.weight.device)
+        )  # (B*N, M)
         z_q = one_hot @ self.embed.weight  # (B*N, M) @ (M, D) -> (B*N, D)
         z_q = z_q.view(*shape, -1)  # (B, N, D)
         return z_q

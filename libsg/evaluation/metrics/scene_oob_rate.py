@@ -48,7 +48,7 @@ class SceneLevelInBoundsRate(EvaluationBase):
 
         return models
 
-    def __call__(self, inp, scene_graph, scene: Scene):
+    def __call__(self, inp, scene_graph, scene: Scene, **kwargs):
         self.num_scenes += 1
         floors = self._load_arch(scene)
         models = self._load_scene(scene)

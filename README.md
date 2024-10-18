@@ -124,7 +124,15 @@ pip install -e .
 
 Afterwards, run
 ```bash
-python3 -c "import nltk; nltk.download('cmudict')"
+pip install --extra-index-url https://ai2thor-pypi.allenai.org ai2thor==0+8524eadda94df0ab2dbb2ef5a577e4d37c712897
+pip install Flask==2.3.3  # need to reinstall because the above version of ai2thor installs an earlier version of flask
+
+python3 -c "import nltk; nlt.download('cmudict')"
+
+python -m objathor.dataset.download_holodeck_base_data --version 2023_09_23
+python -m objathor.dataset.download_assets --version 2023_09_23
+python -m objathor.dataset.download_annotations --version 2023_09_23
+python -m objathor.dataset.download_features --version 2023_09_23
 ```
 
 ## Usage
@@ -158,31 +166,62 @@ Current supported scene formats include STK and HAB.
 
 You can additionally pass configuration options to the API to customize the backend generation of the scene:
 * `sceneInference.parserModel` - specifies the model to use for scene graph parsing (`InstructScene`, `LLM`, `RoomType`)
-* `sceneInference.layoutModel` - specifies the model to use for layout generation (`ATISS`, `DiffuScene`, `InstructScene`)
+* `sceneInference.layoutModel` - specifies the model to use for layout generation (`ATISS`, `DiffuScene`, `Holodeck` `InstructScene`)
 * `sceneInference.passTextToLayout` - if True, the code will attempt to pass the raw text input to the model. Currently
   only applicable to `DiffuScene`. `ATISS` does not condition on text, and `InstructScene` uses the text by default currently.
 * `sceneInference.object.genMethod` - specify generation method for objects (`generate`, `retrieve`)
-* `sceneInference.object.retrieveType` - specify retrieval method for objects (`category`, `embedding`)
+* `sceneInference.object.retrieveType` - specify retrieval method for objects (`id`, `category`, `embedding`)
 * `sceneInference.assetSources` - specify asset sources for retrieval. If not specified, all sources are used (e.g. `3dfModel,fpModel`)
 * `sceneInference.arch.genMethod` - specify generation method for architecture (`generate`, `retrieve` (default))
-* `sceneInference.arch.genModel` - specify model for arch generation (`SquareRoomGenerator`)
-* `sceneInference.retrievalSources` - specify asset sources for retrieval. If not specified, all sources are used (e.g. `3dfModel,fpModel`)
+* `sceneInference.arch.genModel` - specify model for arch generation (`SquareRoomGenerator`, `Holodeck`)
+* `sceneInference.arch.singleRoom` - if True, generate only one room in architecture (`Holodeck` only; default: `False`)
+* `sceneInference.layout.moveObjectsToFloor` - if True, fix the z coordinate of all objects to floor height (default: `True` for every method except `Holodeck`, else `False`)
+* `sceneInference.retrievalSources` - specify asset sources for retrieval. If not specified, all sources are used (e.g. `3dfModel,fpModel,objaverse`)
 * `sceneInference.useCategory` - if True, code will enforce usage of wnsynset key to retrieve objects in addition to embeddings or other metadata. Default: false (`3dfModel`s do not have wnsynset keys)
 
 Examples:
 ```bash
 # basic ATISS bedroom with a square floor plan (no walls)
-curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK", "config": {"sceneInference.parserModel": "RoomType", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "SquareRoomGenerator", "sceneInference.layoutModel": "ATISS", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "category", "sceneInference.retrievalSources": "fpModel", "sceneInference.useCategory": "true"}}' -o test.scene_instance.json
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK", "config": {"sceneInference.parserModel": "RoomType", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "SquareRoomGenerator", "sceneInference.layoutModel": "ATISS", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "category", "sceneInference.assetSources": "fpModel", "sceneInference.useCategory": "true"}}' -o test.scene_instance.json
 
 # DiffuScene using raw text input
 curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a dining room with a table and four chairs around it.", "format": "STK", "config": {"sceneInference.layoutModel": "DiffuScene", "sceneInference.passTextToLayout": "True"}}' -o test.scene_instance.json
 
 # InstructScene with embedding retrieval from fpModel and 3dfModel
-curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK", "config": {"sceneInference.parserModel": "InstructScene", "sceneInference.arch.genMethod": "retrieve", "sceneInference.layoutModel": "InstructScene", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "embedding", "sceneInference.retrievalSources": "fpModel,3dfModel", "sceneInference.useCategory": "false"}}' -o test.scene_instance.json
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK", "config": {"sceneInference.parserModel": "InstructScene", "sceneInference.arch.genMethod": "retrieve", "sceneInference.layoutModel": "InstructScene", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "embedding", "sceneInference.assetSources": "fpModel,3dfModel", "sceneInference.useCategory": "false"}}' -o test.scene_instance.json
+
+# Holodeck
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom with a connected bathroom. The bedroom should have a queen-size bed with an end table next to it, and there should be a desk and office chair in one corner of the bedroom as well.", "format": "STK", "config": {"sceneInference.parserModel": "RoomType", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "Holodeck", "sceneInference.layoutModel": "Holodeck", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "embedding", "sceneInference.assetSources": "fpModel", "sceneInference.useCategory": "false"}}' -o test.holodeck_scene.json
 ```
 
 See [libsg/app.py] for the public-facing API and JSON payloads that can be used with above endpoints and [libsg/api.py] 
 for the internal API, which exposes methods for easy use in downstream code.
+
+### Configuration Compatibility
+
+* Layout Generation: ATISS
+  * Scene Parser: only conditions on room type (recommended: `RoomType`, `RoomTypeLLM`)
+  * Architecture Generation: can work with Holodeck, but may fail or give unexpected results if floor plan is too large
+  * Pass text to layout model: ignored
+* Layout Generation: DiffuScene
+  * Scene Parser: only conditions on room type (recommended: `RoomType`, `RoomTypeLLM`)
+  * Architecture Generation: can work with Holodeck, but may fail or give unexpected results if floor plan is too large (floor plan conditioning only active if text conditioning is `False`)
+  * Pass text to layout model: use to condition on text directly (ignores floor plan)
+* Layout Generation: InstructScene
+  * Scene Parser: requires a scene graph output (recommended: `LLM`, `InstructScene`)
+  * Pass text to layout model: ignored
+  * Architecture Generation: does not condition on floor plan
+  * Pass text to layout model: use to condition on text directly (ignores floor plan)
+* Layout Generation: Holodeck
+  * Scene Parser: conditions on text directly, so this module is ignored (recommended: `SKIP`)
+  * Architecture Generation: requires use of Holodeck for generation
+  * Pass text to layout model: ignored
+  * Object retrieval: must be `embedding`
+  * Retrieve within object category: must be `False` (no mapping currently from object names to wnsynset categories implemented)
+
+While all methods work with any object asset sources in theory, some asset sources are not scaled or rotated properly.
+Other asset sources do not have an associated wnsynset key and thus will be silently excluded if `sceneInference.useCategory` is `True`.
+For best results, use `fpModel` only.
 
 ## Packaging
 

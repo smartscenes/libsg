@@ -51,3 +51,8 @@ class SceneExporter:
             object_instances.append(o_obj)
         obj["object_instances"] = object_instances
         return obj
+    
+    def _export_holodeck(self, scene: Scene, obj: JSONDict) -> JSONDict:
+        from libsg.model.arch_generator.holodeck import Holodeck
+        obj = Holodeck.get_empty_scene()
+        return obj

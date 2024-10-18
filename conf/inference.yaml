@@ -50,7 +50,6 @@ hydra:
   output_subdir: null
 
 data: ".data/evaluation/test_prompts_example.csv"
-# output_dir: "/project/3dlg-hcvc/text2scene/www/comparison"
 output_dir: ".data/evaluation/generated_scenes"
 output_prompt_file: "test_prompts.json"
 semantic_index: ".data/evaluation/semantic_color_index.csv"

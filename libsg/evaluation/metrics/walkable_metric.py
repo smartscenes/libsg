@@ -1,9 +1,11 @@
+import logging
 import numpy as np
 import trimesh, os, cv2
 
 from .base import EvaluationBase
 from libsg.scene import Scene
 from libsg.scene_types import SceneGraph
+from scipy.spatial.transform import Rotation
 
 # https://github.com/PhyScene/PhyScene/blob/main/scripts/eval/walkable_metric.py
 def cal_walkable_metric(floor_plan, floor_plan_centroid, bboxes, doors, robot_width=0.01, visual_path=None, calc_object_area=False):
@@ -110,25 +112,26 @@ def cal_walkable_metric(floor_plan, floor_plan_centroid, bboxes, doors, robot_wi
         else:
             return np.mean(walkable_rate_list),None
     else:
+        # Calculate walkable rate
         walkable_map_max = np.zeros_like(walkable_map)
-        for label in range(1, num_labels):
-            mask = np.zeros_like(walkable_map)
-            walkable_map_door = np.zeros_like(walkable_map)
-            mask[labels == label] = 255
+        if num_labels > 1:
+            # Find the connected component with the largest area
+            for label in range(1, num_labels):  # Skip background
+                mask = np.zeros_like(walkable_map)
+                mask[labels == label] = 255
 
-            if mask.sum() > walkable_map_max.sum():
-                # room connected component with door
-                walkable_map_max = mask.copy()
-
-            # print("walkable_rate:", walkable_map_max.sum()/walkable_map.sum())
-            if calc_object_area:
-                return walkable_map_max.sum()/walkable_map.sum(), object_area_ratio
-            else:
-                return walkable_map_max.sum()/walkable_map.sum()
-        if calc_object_area:    
-            return 0.,object_area_ratio
+                if mask.sum() > walkable_map_max.sum():
+                    walkable_map_max = mask.copy()
+            
+            # Calculate walkable rate from the largest connected component
+            rate = walkable_map_max.sum() / walkable_map.sum()
         else:
-            return 0.,None
+            rate = 0.
+        logging.debug("connected components", num_labels-1)
+        if calc_object_area:
+            return rate, object_area_ratio
+        else:
+            return rate, None
 
 class WalkableMetric(EvaluationBase):
     def __init__(self, object_dir_mapping: str, robot_width=0.3, num_iterations=100, **kwargs):
@@ -152,41 +155,36 @@ class WalkableMetric(EvaluationBase):
             # TODO: make this more general to support other asset sources
             asset_source, _, model_id = mi.model_id.partition(".")
             object_path = os.path.join(
-                self.object_dir_mapping[asset_source], str(model_id[0]), f"{model_id}.collider.glb"
+                self.object_dir_mapping[asset_source], str(model_id[0]), f"{model_id}.glb"
             )
 
             if(not os.path.exists(object_path)):
                 continue
             mesh = trimesh.load(object_path, force="mesh")
-            
-            # Get the center coordinates of the bounding box
-            bounds = mesh.bounds
-            center = (bounds[0] + bounds[1]) / 2
 
+            # Get the center coordinates of the bounding box
+            center = mi.transform.translation
+            scale = mi.transform.scale
+            rotation_rad = mi.transform.rotation
+           
             # Get the width, height, and depth of the bounding box
             extents = mesh.extents
-            width = extents[0]
-            height = extents[1]
-            depth = extents[2]
+            width = extents[0] * scale[0]
+            height = extents[1] * scale[2]
+            depth = extents[2] * scale[1]
 
-            # Get the rotation angle of the bounding box
-            longest_edge = np.argmax(extents)
+            r = Rotation.from_quat(rotation_rad)
+            # Convert to Euler angles (in radians)
+            euler = r.as_euler('xyz', degrees=False)
             
-            # Get the orientation of the mesh
-            orientation = mesh.principal_inertia_vectors[longest_edge]
-            
-            # Calculate the angle between the orientation and the X-axis
-            angle = np.arctan2(orientation[1], orientation[0])
-            # print("Angle: ", angle)
-            new_row = np.array([center[0], center[1], center[2], width, height, depth, angle])
-            bboxes = np.vstack((bboxes, new_row))
+            # print("Center:", center, "Width:", width, "Height:", height, "Depth:", depth, "RAD:", euler)
+            new_bbox = np.array([center[0], center[2], center[1], width, height, depth, euler[2]])
+            bboxes = np.vstack((bboxes, new_bbox))
         return bboxes
     
-    def __call__(self, inp, scene_graph: SceneGraph, scene: Scene):
+    def __call__(self, inp, scene_graph: SceneGraph, scene: Scene, **kwargs):
         floor_points, floor_faces, room_id = scene.arch.get_floor_plan()
-
-        floor_plan = (np.array([[p.x, p.z, p.y] for p in floor_points]), floor_faces)
-        # print(floor_plan, floor_plan)
+        floor_plan = (np.array([[p[0], p[2], p[1]] for p in floor_points]), floor_faces)
         floor_plan_centroid = np.mean(floor_plan[0], axis=0)
         
         # doors = scene.arch.get_door_positions(room_id)
@@ -201,7 +199,7 @@ class WalkableMetric(EvaluationBase):
             bboxes=bbox,
             doors=doors,
             robot_width=self.robot_width,
-            calc_object_area=True
+            calc_object_area=True,
         )
         
         # print("Walkable Metric: ", result, "Object Area Ratio: ", object_area_ratio)

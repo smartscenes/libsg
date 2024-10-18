@@ -1,5 +1,7 @@
 default_model: LLM
 config:
+  PassThrough:
+    load_by_spec: false
   RoomType:
     load_by_spec: false
   RoomTypeLLM:

@@ -6,13 +6,14 @@ from hydra import compose
 
 from .base import BaseSceneParser
 from .llm_sg_parser import LLMSceneParser as LLM
+from .passthrough import PassThroughParser as PassThrough
 from .room_type import RoomTypeParser as RoomType
 from .room_type_llm import RoomTypeLLMParser as RoomTypeLLM
 from .instructscene import InstructSceneParser as InstructScene
 from libsg.scene_types import SceneSpec
 
 
-__all__ = ["LLM", "RoomType", "RoomTypeLLM", "InstructScene"]
+__all__ = ["LLM", "PassThrough", "RoomType", "RoomTypeLLM", "InstructScene"]
 
 
 def build_parser_model(scene_spec: SceneSpec, model_name: str, config: DictConfig, **kwargs) -> BaseSceneParser:
@@ -23,6 +24,9 @@ def build_parser_model(scene_spec: SceneSpec, model_name: str, config: DictConfi
     :param config: configuration for model to return
     :return: wrapper model object around core scene parser model
     """
+    if model_name == "SKIP":
+        model_name = "PassThrough"
+
     config_mapping = config.config[model_name]
 
     if config_mapping.load_by_spec:

@@ -1,6 +1,12 @@
+"""
+inference.py
+---
+Inference script for running libsg models at scale on a set of input prompts. Generates STK files and image renders.
+"""
+
+
 import json
 import os
-import subprocess
 import time
 import traceback
 
@@ -8,15 +14,12 @@ import hydra
 import logging
 import pandas as pd
 from dotenv import load_dotenv
-from hydra.utils import instantiate
 from omegaconf import DictConfig
 
-from libsg.evaluation import metrics as metrics_methods
 from libsg.evaluation.utils import render_view
-from libsg.scene import Scene
 from libsg.scene_parser import SceneParser
 from libsg.scene_builder import SceneBuilder
-from libsg.scene_types import SceneSpec, SceneType, SceneGraph, ArchSpec
+from libsg.scene_types import SceneSpec, SceneType, ArchSpec
 
 load_dotenv()
 logging.basicConfig(

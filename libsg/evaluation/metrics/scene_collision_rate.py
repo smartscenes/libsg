@@ -30,7 +30,7 @@ class SceneLevelCollisionRate(EvaluationBase):
 
         return collision_manager
 
-    def __call__(self, inp, scene_graph, scene: Scene):
+    def __call__(self, inp, scene_graph, scene: Scene, **kwargs):
         collision_manager = self._load_scene(scene)
         is_collision = collision_manager.in_collision_internal(return_names=False, return_data=False)
 

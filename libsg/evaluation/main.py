@@ -1,3 +1,11 @@
+"""
+main.py
+---
+Evaluation script for running models and computing metrics on scenes.
+
+The expected prompt CSV format can be found in the evaluation README.
+"""
+
 import json
 import os
 import re
@@ -31,6 +39,20 @@ performance = {"time": 0.0, "num_generated": 0}
 
 
 def compute_metrics(cfg: DictConfig, parser: SceneParser, layout_builder: SceneBuilder, prompt_data: pd.DataFrame):
+    """Compute metrics to evaluate metrics across multiple prompts, i.e. each evaluated scene is a generated scene 
+    conditioned on some prompt (usu. different for each prompt).
+
+    :param cfg: config
+    :param parser: parser module for extracting a scene representation (e.g. scene graph) from scenes
+    :param layout_builder: layout module for for generating a scene layout from a scene prompt representation
+    :param prompt_data: dataframe of prompts to evaluate
+    :return: dict of the form
+        {
+            "success_rate": proportion of prompts for which a scene was successfully generated,
+            "num_scenes": number of scenes which script attempted to generate,
+            "<metric_name>": log output of metric aggregated across successfully generated scenes
+        }
+    """
     fail_count = 0
     total_count = 0
     metrics = []
@@ -89,7 +111,7 @@ def compute_metrics(cfg: DictConfig, parser: SceneParser, layout_builder: SceneB
                     continue
 
             for metric in metrics:
-                metric(prompt[1], scene_graph, scene)
+                metric(prompt[1], scene_graph, scene, prompt_data=prompt_data)
 
     # print metrics
     print(
@@ -107,6 +129,23 @@ def compute_metrics(cfg: DictConfig, parser: SceneParser, layout_builder: SceneB
 def compute_diversity_metrics(
     cfg: DictConfig, parser: SceneParser, layout_builder: SceneBuilder, prompt_data: pd.DataFrame
 ):
+    """Compute metrics to evaluate the diversity of multiple generations for a single prompt. Each set of diversity 
+    metrics is separate per prompt.
+
+    :param cfg: config
+    :param parser: parser module for extracting a scene representation (e.g. scene graph) from scenes
+    :param layout_builder: layout module for for generating a scene layout from a scene prompt representation
+    :param prompt_data: dataframe of prompts to evaluate
+    :return: dict of the form
+        {
+            "success_rate": {
+                <prompt>: proportion of scenes which were successfully generated
+            <metric_name>: {
+                <prompt>: log output of metric aggregated across successfully generated scenes
+            }
+        }
+    """
+
     diversity_metrics = []
     output = {}
     for metric in cfg.diversity_metrics:
@@ -199,8 +238,9 @@ def main(cfg: DictConfig):
     layout_builder = SceneBuilder(cfg.scene_builder, cfg.arch, cfg.layout, **cfg.methods)
 
     # 2. Load data
-    prompt_data = pd.read_csv(cfg.data)
-
+    prompt_data = pd.read_csv(cfg.data, quotechar='"', sep=',')
+    prompt_data = prompt_data.replace({r'\n': '', r'\r': ''}, regex=True)
+    
     # 3. Generate scenes from input prompts
     output = {"__info__": dict(cfg.methods)}
     output |= compute_metrics(cfg, parser, layout_builder, prompt_data)

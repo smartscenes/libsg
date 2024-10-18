@@ -47,6 +47,18 @@ class ModelInstance:
         mi.transform = Transform.from_json(obj["transform"])
         return mi
 
+    @classmethod
+    def from_holodeck(cls, obj: JSONDict) -> Self:
+        mi = ModelInstance()
+        mi.model_id = obj["assetId"]
+        if "id" in obj:
+            mi.id = obj["id"]
+        else:
+            mi.id = str(obj["index"])
+        mi.parent_id = obj.get("parentId")
+        mi.transform = Transform.from_json(obj["transform"])
+        return mi
+
     def swap_axes(
         self,
         orig_up: list[int],
@@ -262,4 +274,13 @@ class Scene:
         scn.arch = arch
         scn.modifications = []
         scn.model_instances_by_id = {}
+        return scn
+
+    @classmethod
+    def from_holodeck(cls, arch: Architecture, obj: JSONDict) -> Self:
+        scn = Scene.from_arch(arch)
+        scn.modifications = []
+        scn.model_instances_by_id = {}
+        for o in obj["objects"]:
+            scn.add(ModelInstance.from_holodeck(o))
         return scn

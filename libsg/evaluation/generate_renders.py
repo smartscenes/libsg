@@ -1,22 +1,18 @@
-import json
+"""
+generate_renders.py
+---
+This script can be used to generate in batch multiple image renders of a set of STK scenes. It was originally designed
+for testing the rendering functionality due to some random factors in properly rendering assets.
+"""
+
 import os
-import subprocess
-import time
-import traceback
 
 import hydra
 import logging
-import pandas as pd
 from dotenv import load_dotenv
-from hydra.utils import instantiate
 from omegaconf import DictConfig
 
-from libsg.evaluation import metrics as metrics_methods
 from libsg.evaluation.utils import render_view
-from libsg.scene import Scene
-from libsg.scene_parser import SceneParser
-from libsg.scene_builder import SceneBuilder
-from libsg.scene_types import SceneSpec, SceneType, SceneGraph, ArchSpec
 
 load_dotenv()
 logging.basicConfig(
