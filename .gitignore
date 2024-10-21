@@ -138,3 +138,5 @@ MANIFEST.in
 *.png
 scenestate*.json
 shap_e_model_cache/
+
+*.json

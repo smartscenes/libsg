@@ -186,9 +186,7 @@ def generate_scene():
     format_ = request.json.get("format", "STK")
     config = request.json.get("config", {})
     scene_spec = SceneSpec(type=SceneType(type_), input=input_, format=format_)
-    out = scene_generate_api(scene_spec, **config)
-    print(out)
-    return out
+    return scene_generate_api(scene_spec, **config)
 
 
 @app.route("/object/add", methods=["POST"])
