@@ -207,12 +207,16 @@ class Holodeck(BaseLayout):
         return objects
 
     def prepare_outputs(self, scene: JSONDict) -> list[dict[str, Any]]:
+        CM_TO_M = 100   # convert cm to m for mesh scale
+        
         def transform_position(position, axis_order: list[int]):
             reordered = np.array(position)[axis_order]
-            reordered[0] = -reordered[0]
+            # reordered[0] = -reordered[0] # Different from default (ATISS/DiffuScene)
             return reordered.tolist()
 
         def transform_angle(angle):
+            # Mirror the angle by negating it
+            angle = -angle # Different from default (ATISS/DiffuScene)
             angle -= np.pi
             if angle <= -np.pi:
                 angle += 2 * np.pi
@@ -226,9 +230,10 @@ class Holodeck(BaseLayout):
             object_name = object_name.replace("_", " ")
 
             dim = obj["dimension"]
-            dim = [dim["x"], dim["y"], dim["z"]]
+            dim = [dim["x"]/CM_TO_M, dim["y"]/CM_TO_M, dim["z"]/CM_TO_M]
             pos = obj["position"]
-            pos = [pos["x"], pos["y"] - dim[1] / 2, pos["z"]]
+            # pos = [pos["x"], pos["y"] - dim[1] / 2, pos["z"]] #for HSSD asset
+            pos = [pos["x"], pos["y"], pos["z"]]
             orientation = obj["rotation"]["y"] * np.pi / 180
 
             # flip axes if needed

@@ -9,6 +9,7 @@ inputs/outputs into a form that the internal API can handle.
 import logging
 import os
 import traceback
+from pprint import pprint
 
 import flask
 from dotenv import load_dotenv
@@ -186,7 +187,9 @@ def generate_scene():
     format_ = request.json.get("format", "STK")
     config = request.json.get("config", {})
     scene_spec = SceneSpec(type=SceneType(type_), input=input_, format=format_)
-    return scene_generate_api(scene_spec, **config)
+    out = scene_generate_api(scene_spec, **config)
+    pprint(out)
+    return out
 
 
 @app.route("/object/add", methods=["POST"])
@@ -263,7 +266,12 @@ def retrieve_object() -> JSONDict:
     # create object spec
     object_spec = ObjectSpec(type=retrieve_type, description=desc, wnsynsetkey=wnsynsetkey, source=source)
 
-    models = object_retrieve_api(object_spec, max_retrieve=max_retrieve, constraints=constraints)
+    if retrieve_type == "embedding":
+        embedding_type = retrieve_json.get("embedding_type", "openshape_p_1280")
+
+    models = object_retrieve_api(
+        object_spec, max_retrieve=max_retrieve, constraints=constraints, embedding_type=embedding_type
+    )
     return [model.model_id for model in models]
 
 

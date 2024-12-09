@@ -127,7 +127,7 @@ Afterwards, run
 pip install --extra-index-url https://ai2thor-pypi.allenai.org ai2thor==0+8524eadda94df0ab2dbb2ef5a577e4d37c712897
 pip install Flask==2.3.3  # need to reinstall because the above version of ai2thor installs an earlier version of flask
 
-python3 -c "import nltk; nlt.download('cmudict')"
+python3 -c "import nltk; nltk.download('cmudict')"
 
 python -m objathor.dataset.download_holodeck_base_data --version 2023_09_23
 python -m objathor.dataset.download_assets --version 2023_09_23
@@ -142,9 +142,9 @@ Start the server using the following command (by default, the server runs at `lo
 ./start_server.sh
 ```
 
-Use the `--background` option if you want the process to run detached from the shell.
+Use the `-b` option if you want the process to run detached from the shell.
 
-### API examples
+### API
 
 Retrieve a complete scene from the scene dataset:
 ```bash
@@ -184,14 +184,29 @@ Examples:
 # basic ATISS bedroom with a square floor plan (no walls)
 curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK", "config": {"sceneInference.parserModel": "RoomType", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "SquareRoomGenerator", "sceneInference.layoutModel": "ATISS", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "category", "sceneInference.assetSources": "fpModel", "sceneInference.useCategory": "true"}}' -o test.scene_instance.json
 
+# ATISS (3D-FRONT)
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK", "config": {"sceneInference.parserModel": "RoomType", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "SquareRoomGenerator", "sceneInference.layoutModel": "ATISS", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "category", "sceneInference.assetSources": "3dfModel", "sceneInference.useCategory": "true", "sceneInference.retrieve.useWnsynset": "false", "sceneInference.retrieve.mapTo3dfront": "true"}}' -o test.scene_instance.json
+
 # DiffuScene using raw text input
 curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a dining room with a table and four chairs around it.", "format": "STK", "config": {"sceneInference.layoutModel": "DiffuScene", "sceneInference.passTextToLayout": "True"}}' -o test.scene_instance.json
+
+# DiffuScene using embeddings (3D-FRONT)
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK", "config": {"sceneInference.parserModel": "RoomTypeLLM", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "SquareRoomGenerator", "sceneInference.layoutModel": "DiffuScene", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "embedding", "sceneInference.assetSources": "3dfModel", "sceneInference.useCategory": "true", "sceneInference.retrieve.useWnsynset": "false", "sceneInference.retrieve.mapTo3dfront": "true"}}' -o test.scene_instance.json
+
+# LayoutGPT 
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a living room with a coffee table surrounded by a long sofa chair and two small arm chairs. There is an end table on each side of the long sofa.", "format": "STK", "config": {"sceneInference.parserModel": "RoomType", "sceneInference.arch.genMethod": "retrieve", "sceneInference.layoutModel": "LayoutGPT", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "category", "sceneInference.assetSources": "fpModel", "sceneInference.useCategory": "true", "sceneInference.passTextToLayout": "True"}}' -o test.scene_instance.json
+
+# LayoutGPT (3D-FRONT)
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a living room with a coffee table surrounded by a long sofa chair and two small arm chairs. There is an end table on each side of the long sofa.", "format": "STK", "config": {"sceneInference.parserModel": "RoomType", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "SquareRoomGenerator", "sceneInference.layoutModel": "LayoutGPT", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "category", "sceneInference.assetSources": "3dfModel", "sceneInference.useCategory": "true", "sceneInference.passTextToLayout": "True", "sceneInference.retrieve.useWnsynset": "false", "sceneInference.retrieve.mapTo3dfront": "true"}}' -o test.scene_instance.json
 
 # InstructScene with embedding retrieval from fpModel and 3dfModel
 curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK", "config": {"sceneInference.parserModel": "InstructScene", "sceneInference.arch.genMethod": "retrieve", "sceneInference.layoutModel": "InstructScene", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "embedding", "sceneInference.assetSources": "fpModel,3dfModel", "sceneInference.useCategory": "false"}}' -o test.scene_instance.json
 
-# Holodeck
-curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom with a connected bathroom. The bedroom should have a queen-size bed with an end table next to it, and there should be a desk and office chair in one corner of the bedroom as well.", "format": "STK", "config": {"sceneInference.parserModel": "RoomType", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "Holodeck", "sceneInference.layoutModel": "Holodeck", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "embedding", "sceneInference.assetSources": "fpModel", "sceneInference.useCategory": "false"}}' -o test.holodeck_scene.json
+# InstructScene with embedding (3D-FRONT)
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom", "format": "STK", "config": {"sceneInference.parserModel": "InstructScene", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "SquareRoomGenerator", "sceneInference.layoutModel": "InstructScene", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "embedding", "sceneInference.assetSources": "3dfModel", "sceneInference.useCategory": "true", "sceneInference.retrieve.useWnsynset": "false", "sceneInference.retrieve.mapTo3dfront": "true"}}' -o test.scene_instance.json
+
+# Holodeck with Objaverse Asset
+curl -X POST localhost:5000/scene/generate -H 'Content-Type: application/json' -d '{"type": "text", "input": "Generate a bedroom with a connected bathroom. The bedroom should have a queen-size bed with an end table next to it, and there should be a desk and office chair in one corner of the bedroom as well.", "format": "STK", "config": {"sceneInference.parserModel": "SKIP", "sceneInference.arch.genMethod": "generate", "sceneInference.arch.genModel": "Holodeck", "sceneInference.layoutModel": "Holodeck", "sceneInference.object.genMethod": "retrieve", "sceneInference.object.retrieveType": "id", "sceneInference.assetSources": "objaverse", "sceneInference.useCategory": "false"}}' -o test.holodeck_scene.json
 ```
 
 See [libsg/app.py] for the public-facing API and JSON payloads that can be used with above endpoints and [libsg/api.py] 
@@ -207,6 +222,10 @@ for the internal API, which exposes methods for easy use in downstream code.
   * Scene Parser: only conditions on room type (recommended: `RoomType`, `RoomTypeLLM`)
   * Architecture Generation: can work with Holodeck, but may fail or give unexpected results if floor plan is too large (floor plan conditioning only active if text conditioning is `False`)
   * Pass text to layout model: use to condition on text directly (ignores floor plan)
+* Layout Generation: LayoutGPT
+  * Scene Parser: only conditions on room type and text (recommended: `RoomType`, `RoomTypeLLM`)
+  * Architecture Generation: can work with Holodeck, but may fail or give unexpected results if floor plan is too large. Only parses rectangular floorplans correctly.
+  * Pass text to layout model: ignored
 * Layout Generation: InstructScene
   * Scene Parser: requires a scene graph output (recommended: `LLM`, `InstructScene`)
   * Pass text to layout model: ignored
@@ -222,34 +241,3 @@ for the internal API, which exposes methods for easy use in downstream code.
 While all methods work with any object asset sources in theory, some asset sources are not scaled or rotated properly.
 Other asset sources do not have an associated wnsynset key and thus will be silently excluded if `sceneInference.useCategory` is `True`.
 For best results, use `fpModel` only.
-
-## Packaging
-
-Package `libsg` for deployment on PyPI (so other people can install via `pip install libsg`).
-Below packaging follows guidelines at https://packaging.python.org/en/latest/tutorials/packaging-projects/
-Generate tokens on pypi and store in `.pypirc` file as below:
-```ini
-[testpypi]
-  username = __token__
-  password = pypi-XXX
-[pypi]
-  username = __token__
-  password = pypi-XXX
-```
-
-*NOTE*: uploads with a specific version are only allowed once.
-Thus, be careful about current `version` tag in `pyproject.toml` file.
-
-Deploying test package:
-```bash
-pip install --upgrade build twine
-python -m build
-python -m twine upload --repository testpypi dist/*
-python -m pip install --index-url https://test.pypi.org/simple/ --no-deps libsg
-```
-
-Deploying package to real pypi index is same as above except for much simpler upload and install commands:
-```bash
-python -m twine upload dist/*
-pip install libsg
-```

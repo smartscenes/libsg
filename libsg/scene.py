@@ -10,7 +10,18 @@ from libsg.scene_types import JSONDict
 
 
 class ModelInstance:
-    """Main definition of a model/object and its associated transform, related objects, and metadata"""
+    """A class representing a 3D model instance in a scene.
+
+    Attributes:
+        id (str): Unique identifier for this instance
+        type (str): Type identifier, always "ModelInstance"
+        model_id (str): ID of the referenced 3D model
+        parent_id (str | None): ID of parent instance if in hierarchy
+        transform (Transform): Spatial transformation data
+        metadata (dict | None): Optional instance-specific metadata
+        up (list[float] | None): Up vector for coordinate system orientation
+        front (list[float] | None): Front vector for coordinate system orientation
+    """
 
     def __init__(self, model_id="", transform=Transform(), id="", parent_id=None, up=None, front=None):
         self.id: str = id

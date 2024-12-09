@@ -194,6 +194,32 @@ class Holodeck(BaseArchGenerator):
         # TODO: change format
         # TODO: fix axis alignment
 
+        arch = self.prepare_outputs(scene)
+        # arch = Architecture.from_ai2thor(scene, self.materials_db)
+        return arch
+
+    def prepare_outputs(self, scene: dict) -> Architecture:
+        def mirror_x(point):
+            # Only mirror the x coordinate
+            return {"x": -point["x"], "y": point["y"], "z": point["z"]}
+
+        def mirror_x_2d(point):
+            # For 2D points, only mirror the x coordinate
+            return [-point[0], point[1]]
+
+        # Transform rooms
+        for room in scene["rooms"]:
+            room["vertices"] = [mirror_x_2d(v) for v in room["vertices"]]
+            room["floorPolygon"] = [mirror_x(p) for p in room["floorPolygon"]]
+
+        # Transform walls
+        for wall in scene["walls"]:
+            wall["segment"] = [mirror_x_2d(s) for s in wall["segment"]]
+            if "polygon" in wall:
+                wall["polygon"] = [mirror_x(p) for p in wall["polygon"]]
+
+        # Do not need to transform doors and windows as they are relative to the wall
+                
+        # Convert to Architecture object
         arch = Architecture.from_ai2thor(scene, self.materials_db)
-        # breakpoint()
         return arch

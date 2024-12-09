@@ -36,7 +36,10 @@ class Transform:
         return self._s
 
     def set_scale(self, s):
-        self._s = copy.deepcopy(s)
+        if isinstance(s, (int, float)):
+            self._s = [float(s)] * 3
+        else:
+            self._s = copy.deepcopy(s) if isinstance(s, list) else copy.deepcopy(s.tolist())
         self.__update_matrix()
 
     @property

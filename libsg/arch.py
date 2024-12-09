@@ -779,7 +779,6 @@ class Architecture:
     #                         "box": {"min": [min_dist, height[0]], "max": [max_dist, height[1]]},
     #                     }
     #                 )
-    #     breakpoint()
 
     #     # parse walls and openings
     #     rooms_to_walls = defaultdict(list)

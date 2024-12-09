@@ -10,10 +10,11 @@ from .atiss import ATISS
 from .diffuscene import DiffuScene
 from .holodeck import Holodeck
 from .instructscene import InstructScene
+from .layoutgpt import LayoutGPT
 from .base import BaseLayout
 
 
-__all__ = ["ATISS", "DiffuScene", "Holodeck", "InstructScene", "BaseLayout"]
+__all__ = ["ATISS", "DiffuScene", "Holodeck", "InstructScene", "BaseLayout", "LayoutGPT"]
 
 
 def build_layout_model(
@@ -36,7 +37,12 @@ def build_layout_model(
 
     if layout_spec.type == SceneType.category and config_mapping.load_by_spec:
         room_type = layout_spec.input
-        model_config_path = config_mapping[room_type]
+        if room_type in config_mapping:
+            model_config_path = config_mapping[room_type]
+        elif "default" in config_mapping:
+            model_config_path = config_mapping["default"]
+        else:
+            raise ValueError(f"No model configuration found for room type: {room_type}")
 
         model_config = compose(os.path.join("layout_generator", model_config_path))
 

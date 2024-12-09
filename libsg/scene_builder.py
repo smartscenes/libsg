@@ -7,6 +7,8 @@ future, some of the functionality here may be split off into other classes.
 """
 
 import json
+import os
+import compress_json
 import numpy as np
 import sys
 from easydict import EasyDict
@@ -14,6 +16,8 @@ from omegaconf import DictConfig
 from typing import Any, Optional
 
 import numpy as np
+import pandas as pd
+import trimesh
 
 from libsg.arch_builder import ArchBuilder
 from libsg.arch import Architecture
@@ -97,7 +101,12 @@ class SceneBuilder:
         self.object_retrieve_type = kwargs.get(
             "sceneInference.object.retrieveType", cfg.model_db.default_object_retrieve_type
         )
-        self.move_objects_to_floor = kwargs.get("sceneInference.layout.moveObjectsToFloor", "False" if self.layout_model == "Holodeck" else "True").lower() == "true"
+        self.move_objects_to_floor = (
+            kwargs.get(
+                "sceneInference.layout.moveObjectsToFloor", "False" if self.layout_model == "Holodeck" else "True"
+            ).lower()
+            == "true"
+        )
 
         # architecture parameters
         self.arch_method = kwargs.get("sceneInference.arch.genMethod", "retrieve")
@@ -107,24 +116,17 @@ class SceneBuilder:
 
     def generate(self, scene_spec: SceneSpec) -> JSONDict:
         """
-        Generate a complete 3D scene based on the given scene specification.
+        Main function for generating a complete 3D scene.
 
         This method orchestrates the entire scene generation process, including:
         1. Generating or retrieving the room architecture
-        2. Creating a coarse layout of objects within the room
-        3. Generating or retrieving detailed 3D objects based on the layout
-        4. Composing the final scene
+        2. Creating a layout of objects within the room
+        3. Generating or retrieving 3D meshes based on the layout
+        4. Output the final scene
 
         :param scene_spec: A SceneSpec object containing the specification for the scene to generate.
-                        This includes the scene type (e.g., "bedroom", "living room"), any specific
-                        requirements or constraints, and the desired output format.
 
-        :return: A JSON dictionary representing the complete generated scene. The structure of this
-                dictionary depends on the specified output format (e.g., HAB or STK), but generally
-                includes:
-                - Room architecture information (walls, floor, ceiling)
-                - List of objects with their 3D models, positions, orientations, and sizes
-                - Any additional metadata required by the output format
+        :return: A JSON dictionary representing the complete generated scene according to the specified output format (e.g., HAB or STK)
 
         :raises ValueError: If the scene specification is invalid or unsupported.
         """
@@ -248,10 +250,17 @@ class SceneBuilder:
             )
             placement_spec = PlacementSpec(type="placement_point", position=position, orientation=orientation)
 
-            # retrieve or generate object
+            # retrieve by embedding
+            kwargs = {}
+            if self.object_method == "retrieve" and object_spec.type == "embedding":
+                kwargs["embedding_type"] = self.layout_cfg.config[self.layout_model].embedding_type
+            kwargs["room_type"] = scene_layout.room_type
+
+            # retrieve or generate object (either generate() or retrieve() on object_builder based on config)
             model_instance = getattr(self.__object_builder, self.object_method)(
-                object_spec, placement_spec, dataset_name=scene_layout.room_type
+                object_spec, placement_spec, dataset_name=scene_layout.room_type, **kwargs
             )
+
             # add object to scene
             if model_instance is not None:
                 self.object_placer.try_add(scene, model_instance, placement_spec)

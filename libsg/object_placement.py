@@ -232,7 +232,8 @@ class ObjectPlacer:
             object_proposal.up, object_proposal.front, placement.up or scene.up, placement.front or scene.front
         )
         object_proposal.transform.set_rotation(rotation)
-
+        object_proposal.transform.set_scale(object_instance.transform.scale)
+        
         if not self.allow_collisions:
             ignore_object_ids = []
             if placement.ref_object is not None:

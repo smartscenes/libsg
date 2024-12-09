@@ -130,11 +130,11 @@ def object_move(scene_state: SceneState, object_spec: ObjectSpec, move_spec: Mov
 
 
 # @app.route('/object/retrieve')
-def object_retrieve(object_spec: ObjectSpec, max_retrieve: int = 1, constraints: str = "") -> list[ModelInstance]:
+def object_retrieve(object_spec: ObjectSpec, max_retrieve: int = 1, constraints: str = "", embedding_type: str = "openshape_p_1280") -> list[ModelInstance]:
     base_solr_url = cfg.scene_builder.solr_url
     model_db = AssetDb("model", cfg.scene_builder.get("model_db"), solr_url=f"{base_solr_url}/models3d")
     object_builder = ObjectBuilder(model_db, cfg.scene_builder.model_db)
-    return object_builder.retrieve(object_spec, max_retrieve=max_retrieve, constraints=constraints)
+    return object_builder.retrieve(object_spec, max_retrieve=max_retrieve, constraints=constraints, embedding_type=embedding_type)
 
 
 # @app.route('/object/retrieve')

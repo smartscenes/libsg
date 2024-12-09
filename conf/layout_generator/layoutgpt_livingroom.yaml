@@ -1,29 +1,24 @@
-weight_file: .data/models/atiss/livingroom/model_00100
+network:
+  room_type: livingroom
+  model_name: gpt-4o
+  examples_path: .data/models/layoutgpt/livingroom/exemplars
+  stats_file: .data/models/layoutgpt/livingroom/dataset_stats.txt
+  id_path: .data/models/layoutgpt/livingroom/splits.json
+  unit: px
+  gpt_input_length_limit: 7000
+  icl_type: k-similar
+  top_k: 8
+  temperature: 0.7
+  top_p: 1.0
+  normalize: True
+  room_mask_condition: true
 
 data:
   room_layout_size: "64,64"
   room_dims: [12.4, 12.4]  # in meters; [x_max - x_min, y_max - y_min]
   bounds: {sizes: [[0.03998999999999997, 0.020000020334800084, 0.0328434999999998], [2.3802699999999994, 1.7700649999999998, 1.3224289999999996]], translations: [[-5.672918693230125, 0.0375, -5.716401580065309], [5.09667921844729, 3.3577405149437496, 5.4048500000000015]], angles: [-3.14159265, 3.14159265]}
   classes: [armchair.n.01, bookcase.n.01, cabinet.n.01, ceiling_lamp.n.01, chaise_longue.n.01, chair.n.01, coffee_table.n.01, console_table.n.01, table.n.02, desk.n.01, chair.n.01, dining_table.n.01, l-shaped_couch.n.01, sofa.n.01, chair.n.01, chair.n.01, sofa.n.01, pendant_lamp.n.01, end_table.n.01, shelf.n.01, stool.n.01, tv_stand.n.01, wardrobe.n.01, wine_rack.n.01, start, end]
+  object_types: ["armchair", "bookshelf", "cabinet", "ceiling_lamp", "chaise_longue_sofa", "chinese_chair", "coffee_table", "console_table", "corner_side_table", "desk", "dining_chair", "dining_table", "l_shaped_sofa", "lazy_sofa", "lounge_chair", "loveseat_sofa", "multi_seat_sofa", "pendant_lamp", "round_end_table", "shelf", "stool", "tv_stand", "wardrobe", "wine_cabinet"]
   raw_classes: ["armchair", "bookshelf", "cabinet", "ceiling lamp", "chaise longue sofa", "chinese chair", "coffee table", "console table", "corner/side table", "desk", "dining chair", "dining table", "l-shaped sofa", "lazy sofa", "lounge chair", "loveseat sofa", "multi-seat sofa", "pendant lamp", "round end table", "shelf", "stool", "tv stand", "wardrobe", "wine cabinet"]
   up_axis: "y"
 export_room_mask: true
-
-network:
-  name: "ATISS"
-  n_layers: 4
-  n_heads: 8
-  query_dimensions: 64
-  value_dimensions: 64
-  feed_forward_dimensions: 1024
-  hidden_dims: 512
-  with_extra_fc: false
-  n_mixtures: 10
-  room_mask_condition: true
-
-feature_extractor:
-  feature_size: 64
-  freeze_bn: true
-  input_channels: 1
-
-device: cuda

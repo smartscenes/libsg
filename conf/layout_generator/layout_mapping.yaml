@@ -5,17 +5,30 @@ config:
   ATISS:
     load_by_spec: true
     can_condition_on_text: false
+    embedding_type: null
     bedroom: atiss_bedroom.yaml
     diningroom: atiss_diningroom.yaml
     livingroom: atiss_livingroom.yaml
+    default: atiss_livingroom.yaml
   DiffuScene:
     load_by_spec: true
     can_condition_on_text: true
+    embedding_type: diffuscene_latent_p_32
     bedroom: diffusion_bedrooms_dim512_nomask_instancond_objfeats_lat32.yaml
     diningroom: diffusion_diningrooms_dim512_nomask_instancond_objfeats_lat32.yaml
     livingroom: diffusion_livingrooms_dim512_nomask_instancond_objfeats_lat32.yaml
+    default: diffusion_livingrooms_dim512_nomask_instancond_objfeats_lat32.yaml
+  LayoutGPT:
+    load_by_spec: true
+    can_condition_on_text: true
+    embedding_type: openshape_p_1280
+    bedroom: layoutgpt_bedroom.yaml
+    livingroom: layoutgpt_livingroom.yaml
+    default: layoutgpt_livingroom.yaml
   Holodeck:
     load_by_spec: false
+    can_condition_on_text: true
+    embedding_type: null
     params:
       llm_model_name: gpt-4o-2024-05-13
       clip_params:
@@ -29,6 +42,7 @@ config:
   InstructScene:
     load_by_spec: true
     can_condition_on_text: true
+    embedding_type: openshape_p_1280
     bedroom: instructscene_bedroom_sg2sc_diffusion_objfeat.yaml
     diningroom: instructscene_diningroom_sg2sc_diffusion_objfeat.yaml
     livingroom: instructscene_livingroom_sg2sc_diffusion_objfeat.yaml

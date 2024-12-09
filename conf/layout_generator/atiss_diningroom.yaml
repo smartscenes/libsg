@@ -5,7 +5,7 @@ data:
   room_dims: [12.4, 12.4]  # in meters; [x_max - x_min, y_max - y_min]
   bounds: {sizes: [[0.032552000000000025, 0.020000020334800084, 0.009999999999999884], [2.3802699999999994, 1.7700649999999998, 1.4137885]], translations: [[-5.089109999999999, 0.0375, -5.716401580065309], [5.09667921844729, 3.384158412231445, 5.4048500000000015]], angles: [-3.141592653589793, 3.141592653589793]}
   classes: [armchair.n.01, bookcase.n.01, cabinet.n.01, ceiling_lamp.n.01, chaise_longue.n.01, chair.n.01, coffee_table.n.01, console_table.n.01, table.n.02, desk.n.01, chair.n.01, dining_table.n.01, l-shaped_couch.n.01, sofa.n.01, chair.n.01, chair.n.01, sofa.n.01, pendant_lamp.n.01, end_table.n.01, shelf.n.01, stool.n.01, tv_stand.n.01, wardrobe.n.01, wine_rack.n.01, start, end] 
-  raw_classes: ["armchair", "bookcase", "cabinet", "ceiling lamp", "chaise longue sofa", "chinese chair", "coffee table", "console table", "corner/side table", "desk", "dining chair", "dining table", "l-shaped sofa", "lazy sofa", "lounge chair", "loveseat sofa", "multi-seat sofa", "pendant lamp", "round end table", "shelf", "stool", "tv stand", "wardrobe", "wine cabinet"]
+  raw_classes: ["armchair", "bookshelf", "cabinet", "ceiling lamp", "chaise longue sofa", "chinese chair", "coffee table", "console table", "corner/side table", "desk", "dining chair", "dining table", "l-shaped sofa", "lazy sofa", "lounge chair", "loveseat sofa", "multi-seat sofa", "pendant lamp", "round end table", "shelf", "stool", "tv stand", "wardrobe", "wine cabinet"]
   up_axis: "y"
 export_room_mask: true
 

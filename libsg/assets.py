@@ -60,6 +60,8 @@ class AssetGroup:
 
 
 class AssetDb:
+    MAX_IDS = 1024
+
     def __init__(self, name, cfg, solr_url=None):
         self.name = name
         metadata_path = cfg.get("metadata")
@@ -118,33 +120,51 @@ class AssetDb:
     def _to_scaled_floats(s, scale, default=None):
         return [float(x) * scale for x in s.split(",")] if s else default
 
-    def _query_metadata(self, ids: list[str]):
+    @staticmethod
+    def _to_lower(s, default=None):
+        return [x.lower() for x in s] if s else default
+
+    def _query_metadata(self, ids: list[str], fields: list[str] = None, **kwargs):
+        if fields is None:
+            postprocess = True
+            fields = "fullId,wnsynsetkey,up,front,aligned.dims,category0"
+        else:
+            postprocess = False
+            fields = ",".join(fields)
+
         query = self.get_query_for_ids(ids[:1024])
-        results = self.__solr.search(query, fl="fullId,wnsynsetkey,up,front,aligned.dims")
+        results = self.__solr.search(query, fl=fields, **kwargs)
         converted = []
-        if len(results):
-            for result in results:
-                up = result.get("up")
-                up = AssetDb._to_floats(up, self.default_up)
-                front = result.get("front")
-                front = AssetDb._to_floats(front, self.default_front)
-                raw_dims = result.get("aligned.dims")
-                raw_dims = AssetDb._to_floats(raw_dims, None)
-                aligned_dims = result.get("aligned.dims")
-                aligned_dims = AssetDb._to_scaled_floats(aligned_dims, 1 / 100, None)
-                converted.append(
-                    EasyDict(
-                        {
-                            "fullId": result["fullId"],
-                            "wnsynsetkey": result.get("wnsynsetkey", None),
-                            "up": up,
-                            "front": front,
-                            "raw_dims": raw_dims,
-                            "dims": aligned_dims,
-                        }
+        if postprocess:
+            if len(results):
+                for result in results:
+                    up = result.get("up")
+                    up = AssetDb._to_floats(up, self.default_up)
+                    front = result.get("front")
+                    front = AssetDb._to_floats(front, self.default_front)
+                    raw_dims = result.get("aligned.dims")
+                    raw_dims = AssetDb._to_floats(raw_dims, None)
+                    aligned_dims = result.get("aligned.dims")
+                    aligned_dims = AssetDb._to_scaled_floats(aligned_dims, 1 / 100, None)
+                    category0 = result.get("category0")
+                    category0 = AssetDb._to_lower(category0, None)
+
+                    converted.append(
+                        EasyDict(
+                            {
+                                "fullId": result["fullId"],
+                                "wnsynsetkey": result.get("wnsynsetkey", None),
+                                "up": up,
+                                "front": front,
+                                "raw_dims": raw_dims,
+                                "dims": aligned_dims,
+                                "category0": category0,
+                            }
+                        )
                     )
-                )
-        return converted
+            return converted
+        else:
+            return [dict(r) for r in results]
 
     def get_metadata(self, id: str):
         results = self._query_metadata([id])
@@ -152,8 +172,14 @@ class AssetDb:
             return results[0]
         return results
 
-    def get_metadata_for_ids(self, ids: list[str]):
-        return self._query_metadata(ids)
+    def get_metadata_for_ids(self, ids: list[str], fields: list[str] = None):
+        response = []
+        i = 0
+        while i < len(ids):
+            batch_ids = ids[i : i + self.MAX_IDS]
+            response.extend(self._query_metadata(batch_ids, fields, rows=len(batch_ids)))
+            i += self.MAX_IDS
+        return response
 
     # sort assets by closeness to specified dimensions
     def sort_by_dim(self, ids: list[str], dims: list[float]):

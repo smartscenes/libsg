@@ -4,10 +4,11 @@ object_builder.py
 This module is responsible for generating and retrieving objects for scenes.
 """
 
-import copy
+import json
 import logging
 import os
 import random
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -27,9 +28,11 @@ from shap_e.rendering.torch_mesh import TorchMesh
 from shap_e.util.collections import AttrDict
 
 from libsg.assets import AssetDb
+from libsg.embeddings import EmbeddingsLookup
 from libsg.model.instructscene.clip_encoders import CLIPTextEncoderWrapper
 from libsg.scene import ModelInstance
 from libsg.scene_types import ObjectSpec, PlacementSpec, Point3D
+from libsg.utils import parse_bool_from_str, label_to_3dfront_category
 
 
 @dataclass
@@ -57,6 +60,7 @@ class ObjectBuilder:
     def __init__(self, model_db: AssetDb, cfg: DictConfig, **kwargs):
         self.cfg = cfg
         self.__model_db = model_db
+        self.embedding_dir = cfg.retrieval.embedding_dir
 
         # object retrieval parameters
         self.size_threshold = cfg.get("size_threshold", 0.5)
@@ -82,15 +86,19 @@ class ObjectBuilder:
 
         self._text_encoder = None
 
-        sources_raw = kwargs.get("sceneInference.assetSources", self.DEFAULT_SOURCES)
+        sources_raw = kwargs.get("sceneInference.assetSources", self.DEFAULT_SOURCES)  # TODO: update to use .retrieve
         if sources_raw and sources_raw != "*":
             self.sources = sources_raw.split(",")
         else:
             self.sources = None
-        use_wnsynset = kwargs.get("sceneInference.useCategory", "true").lower()
-        if use_wnsynset not in {"true", "false"}:
-            raise ValueError(f"Invalid value for sceneInference.useCategory: {use_wnsynset}")
-        self.use_wnsynset = use_wnsynset == "true"
+        self.use_category = parse_bool_from_str(
+            kwargs, "sceneInference.useCategory", default=False
+        )  # TODO: update to use .retrieve
+        self.use_wnsynset = parse_bool_from_str(kwargs, "sceneInference.retrieve.useWnsynset", default=True)
+        self.map_to_3dfront = parse_bool_from_str(kwargs, "sceneInference.retrieve.mapTo3dfront", default=False)
+
+        with open(cfg.retrieval.threed_future_object_ids, "r") as f:
+            self.threed_future_object_ids = json.load(f)
 
     @cached_property
     def generation_text_model(self):
@@ -227,10 +235,11 @@ class ObjectBuilder:
         object_spec: ObjectSpec,
         placement_spec: Optional[PlacementSpec] = None,
         *,
-        dataset_name: Optional[str] = None,  # originally for 3D-FUTURE
         max_retrieve: int = 0,
         constraints: str = "",
         filter_parts: bool = True,
+        embedding_type: str = None,
+        room_type: str,
         **kwargs,
     ) -> ModelInstance:
         """
@@ -281,7 +290,14 @@ class ObjectBuilder:
                     return None
 
             case "category":  # use solr to search based on wnsynsetkey
-                query = object_spec.description if object_spec.description else "*"
+                if self.use_category:
+                    if self.map_to_3dfront:
+                        query = self._construct_filter_3dfront(room_type, object_spec.description)
+                    else:
+                        category = object_spec.description.title()
+                        query = f'category0:"{category}"'
+                else:
+                    query = "*"
                 if constraints:  # TODO: check if this is correct
                     query = f"{query} AND {constraints}"
                 fq = self._build_object_query(object_spec, placement_spec, constraints=constraints)
@@ -290,6 +306,9 @@ class ObjectBuilder:
                 # ignore parts
                 if filter_parts:
                     results = filter(lambda r: "_part_" not in r["fullId"], results)
+
+                if self.map_to_3dfront:
+                    results = filter(lambda r: r["fullId"] in self.threed_future_object_ids, results)
 
                 model_ids = list([result["fullId"] for result in results])
                 if len(model_ids) == 0:
@@ -302,25 +321,12 @@ class ObjectBuilder:
                 if object_spec.embedding is None:
                     desc = object_spec.description
                     object_spec.embedding = self.get_text_embedding(desc)
-                if constraints:
-                    constraints = " ".join([f"preFilter={c}" for c in constraints.split("AND")])
-                else:
-                    constraints = 'preFilter=""'
-                query = f"{{!knn f={self.ret_embedding_field} topK={max(max_retrieve, self.ret_top_k)} {constraints}}}"
-                fq = self._build_object_query(object_spec, placement_spec)
-                embedding = object_spec.embedding.tolist()
-                results = self.__model_db.search(
-                    query + str(embedding),
-                    fl="fullId",
-                    fq=fq,
-                    rows=ObjectBuilder.DEFAULT_ROWS,
+                    embedding_type = "openshape_p_1280"
+
+                model_ids = self._get_embeddings_by_faiss(
+                    object_spec, max_retrieve=max_retrieve, embedding_type=embedding_type, room_type=room_type
                 )
 
-                # ignore parts
-                if filter_parts:
-                    results = filter(lambda r: "_part_" not in r["fullId"], results)
-
-                model_ids = list([result["fullId"] for result in results])
                 if len(model_ids) == 0:
                     raise ValueError(f'Cannot find object matching query "{query}" with filter "{fq}"')
 
@@ -345,6 +351,8 @@ class ObjectBuilder:
             fq += "+(" + " OR ".join([f"source:{source}" for source in self.sources]) + ")"
         if self.use_wnsynset and object_spec.wnsynsetkey:
             fq += f" +wnhypersynsetkeys:{object_spec.wnsynsetkey}"
+        if constraints:
+            fq += f" {constraints}"
         if not placement_spec:
             return fq
         reference_object = PlacementSpec.get_placement_reference_object(placement_spec)
@@ -356,8 +364,6 @@ class ObjectBuilder:
                     fq = fq + " +support:top"
                 case _:
                     fq = fq + " -support:top -support:vertical"
-        if constraints:
-            fq += f" {constraints}"
         return fq
 
     def _filter_by_size(self, model_ids, object_spec: ObjectSpec, max_retrieve: int = 0):
@@ -390,3 +396,70 @@ class ObjectBuilder:
                 selected_metadata = self.__model_db.get_metadata_for_ids(model_ids)[0]
 
         return selected_metadata
+
+    def _get_embeddings_by_solr(
+        self,
+        object_spec: ObjectSpec,
+        placement_spec: PlacementSpec,
+        max_retrieve: int = 0,
+        filter_parts: bool = True,
+        constraints: str = "",
+    ) -> list[str]:
+        if constraints:
+            constraints = " ".join([f"preFilter={c}" for c in constraints.split("AND")])
+        else:
+            constraints = 'preFilter=""'
+        query = f"{{!knn f={self.ret_embedding_field} topK={max(max_retrieve, self.ret_top_k)} {constraints}}}"
+        fq = self._build_object_query(object_spec, placement_spec)
+        embedding = object_spec.embedding.tolist()
+        results = self.__model_db.search(
+            query + str(embedding),
+            fl="fullId",
+            fq=fq,
+            rows=ObjectBuilder.DEFAULT_ROWS,
+        )
+
+        # ignore parts
+        if filter_parts:
+            results = filter(lambda r: "_part_" not in r["fullId"], results)
+
+        return list([result["fullId"] for result in results])
+
+    def _get_embeddings_by_faiss(
+        self, object_spec: ObjectSpec, *, max_retrieve: int = 0, embedding_type: str, room_type: str
+    ) -> list[str]:
+        # get valid IDs based on wnsynset
+        if self.use_category:
+            if self.map_to_3dfront:
+                query = self._construct_filter_3dfront(room_type, object_spec.description)
+            else:
+                category = object_spec.description.title()
+                query = f'category0:"{category}"'
+            fq = self._build_object_query(object_spec)
+            results = self.__model_db.search(query, fl="fullId,category0", fq=fq, rows=ObjectBuilder.DEFAULT_ROWS)
+            print(object_spec.description, set([res["category0"][-1] for res in results]))
+            results = filter(lambda r: "_part_" not in r["fullId"], results)
+            model_ids_by_category = list([result["fullId"] for result in results])
+            if len(model_ids_by_category) == 0:
+                raise ValueError(f'Cannot find object matching query "{query}" with filter "{fq}"')
+        else:
+            model_ids_by_category = None
+
+        embedding_lookup = EmbeddingsLookup(
+            os.path.join(self.embedding_dir, f"{embedding_type}.csv"),
+            os.path.join(self.embedding_dir, f"{embedding_type}.index"),
+            top_k=self.ret_top_k,
+        )
+        return embedding_lookup(
+            object_spec.embedding, sources=self.sources, model_ids=model_ids_by_category, max_retrieve=max_retrieve
+        )
+
+    def _construct_filter_3dfront(self, room_type: str, object_label: str) -> str:
+        try:
+            category_mapping_by_room_type = label_to_3dfront_category[room_type]
+        except KeyError:
+            raise ValueError(f"Unsupported room type for getting 3d-front room categories: {room_type}")
+        threedfront_labels = category_mapping_by_room_type[
+            re.sub(r"[ /-]+", "_", object_label)
+        ]  # FIXME: this is a hack
+        return " OR ".join(f'category0:"{l}"' for l in threedfront_labels)
