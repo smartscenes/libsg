@@ -5,7 +5,7 @@ structured3d_path: ???  # base path to structured3d architecture files
 scene_builder:
   arch_db:
     metadata: .data/datasets/structured3d/structured3d.rooms.csv
-    path: "${base_url}/${structured3d_basepath}/arch/{scene_id}.arch.json"
+    path: "${base_url}/${structured3d_path}/arch/{scene_id}.arch.json"
   scene_db:
     path: "${base_dir}/fpsb/scenes/cluttered/scenestate"
   model_db:
